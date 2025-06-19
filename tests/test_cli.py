@@ -330,6 +330,21 @@ class TestCLIIntegration:
     """Test CLI integration and main function."""
     
     @patch('awsprofile.cli.AWSProfileManager')
+    def test_main_switch_profile_with_suggestion(self, mock_manager_class):
+        """Test main function switching profile with shell integration suggestion."""
+        mock_manager = MagicMock()
+        mock_manager.get_available_profiles.return_value = ['default', 'work']
+        mock_manager.check_shell_integration.return_value = True
+        mock_manager_class.return_value = mock_manager
+        
+        with patch('sys.argv', ['awsprofile', 'work']):
+            from awsprofile.cli import main
+            main()
+            
+        mock_manager.switch_profile.assert_called_once_with('work')
+        mock_manager.check_shell_integration.assert_called_once()
+
+class TestCLIMainFunction:
     def test_main_create_profile(self, mock_manager_class):
         """Test main function with profile creation."""
         mock_manager = MagicMock()

@@ -17,7 +17,7 @@ from typing import List, Tuple, Optional
 import shutil
 import getpass
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 class AWSProfileManager:
     """Main class for managing AWS profiles."""
@@ -382,6 +382,91 @@ region = {region}
         
         return True
     
+    def setup_shell_integration(self) -> bool:
+        """Set up shell integration automatically."""
+        shell = os.environ.get('SHELL', '').split('/')[-1]
+        home = Path.home()
+        
+        if shell == 'zsh':
+            shell_config = home / '.zshrc'
+        elif shell == 'bash':
+            shell_config = home / '.bashrc'
+        else:
+            print(f"❌ Unsupported shell: {shell}")
+            print("💡 Supported shells: bash, zsh")
+            return False
+        
+        # Shell integration functions
+        integration_code = '''
+# AWS Profile Switcher - Auto-generated
+awsp() { eval "$(awsprofile "$1" --shell)"; }
+awsl() { awsprofile list; }
+awsi() { awsprofile; }
+awsc() { awsprofile current; }
+awsclear() { unset AWS_PROFILE; echo "✅ Cleared AWS_PROFILE"; }
+
+# Tab completion for profile names
+if [[ "$SHELL" == *"zsh"* ]]; then
+    _awsp_completion() {
+        local profiles=($(awsprofile list --names-only 2>/dev/null))
+        _describe 'AWS profiles' profiles
+    }
+    compdef _awsp_completion awsp
+elif [[ "$SHELL" == *"bash"* ]]; then
+    _awsp_completion() {
+        local cur="${COMP_WORDS[COMP_CWORD]}"
+        local profiles=$(awsprofile list --names-only 2>/dev/null)
+        COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
+    }
+    complete -F _awsp_completion awsp
+fi
+'''
+        
+        # Check if already set up
+        if shell_config.exists():
+            content = shell_config.read_text()
+            if 'AWS Profile Switcher - Auto-generated' in content:
+                print("✅ Shell integration already set up!")
+                return True
+        
+        print(f"🔧 Setting up shell integration for {shell}...")
+        
+        try:
+            # Backup existing config
+            if shell_config.exists():
+                backup_path = shell_config.with_suffix(f'{shell_config.suffix}.backup')
+                shutil.copy2(shell_config, backup_path)
+                print(f"📋 Backed up {shell_config} to {backup_path}")
+            
+            # Append integration code
+            with open(shell_config, 'a') as f:
+                f.write('\n' + integration_code)
+            
+            print(f"✅ Added shell integration to {shell_config}")
+            print("\n🎉 Setup complete!")
+            print(f"💡 Run: source {shell_config}")
+            print("💡 Or restart your terminal")
+            print("\nThen use these commands:")
+            print("  awsp <profile>  - Switch profiles")
+            print("  awsl           - List profiles") 
+            print("  awsi           - Interactive mode")
+            print("  awsc           - Show current profile")
+            print("  awsclear       - Clear profile")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error setting up shell integration: {str(e)}")
+            return False
+
+    def check_shell_integration(self) -> bool:
+        """Check if shell integration is available."""
+        try:
+            result = subprocess.run(['which', 'awsp'], capture_output=True, text=True)
+            return result.returncode == 0
+        except:
+            return False
+
     def switch_profile(self, profile_name: str, shell_mode: bool = False) -> bool:
         """Switch to a specific AWS profile."""
         if not self.validate_profile(profile_name):
@@ -500,27 +585,33 @@ region = {region}
 def show_help():
     """Show help message."""
     print("AWS Profile Switcher v{}".format(__version__))
-    print("\nA simple tool to view, switch, create, and delete AWS profiles.")
+    print("\nA simple tool to create, view, switch, and delete AWS profiles with shell integration.")
     print("\nUsage:")
     print("  awsprofile                    # Interactive mode")
     print("  awsprofile list               # Show all profiles")
+    print("  awsprofile current            # Show current profile")
     print("  awsprofile <profile>          # Switch to specific profile")
     print("  awsprofile <profile> --shell  # Output shell export command")
     print("  awsprofile create <profile>   # Create a new profile")
     print("  awsprofile delete <profile>   # Delete a profile")
+    print("  awsprofile setup-shell        # Set up shell integration (one-time)")
     print("  awsprofile --help             # Show this help")
     print("  awsprofile --version          # Show version")
     print("\nExamples:")
-    print("  awsprofile                    # Start interactive mode")
-    print("  awsprofile work               # Switch to 'work' profile")
-    print("  awsprofile list               # List all available profiles")
-    print("  awsprofile create dev         # Create 'dev' profile interactively")
-    print("  awsprofile delete old-profile # Delete 'old-profile'")
-    print("  eval \"$(awsprofile work --shell)\" # Switch for current shell")
-    print("\nShell Integration:")
-    print("  Add this to your ~/.zshrc or ~/.bashrc:")
-    print("  awsp() { eval \"$(awsprofile \"$1\" --shell)\"; }")
-    print("  Then use: awsp work")
+    print("  awsprofile setup-shell        # One-time setup")
+    print("  awsprofile list               # See YOUR actual profile names")
+    print("  awsprofile my-company-prod    # Switch to YOUR profile (replace with real name)")
+    print("  awsprofile current            # Show current profile")
+    print("  awsprofile create new-client  # Create profile named 'new-client'")
+    print("  awsprofile delete old-profile # Delete YOUR profile (replace with real name)")
+    print("\nShell Integration (after setup-shell):")
+    print("  awsp <YOUR-PROFILE-NAME>  # Switch profiles (use YOUR real profile names!)")
+    print("  awsl                      # List all profiles")
+    print("  awsi                      # Interactive mode")
+    print("  awsc                      # Show current profile") 
+    print("  awsclear                  # Clear AWS_PROFILE")
+    print("\n💡 Important: Replace <profile> and <YOUR-PROFILE-NAME> with your actual AWS profile names!")
+    print("   Use 'awsprofile list' to see what profiles you have.")
 
 
 def generate_shell_integration():
