@@ -15,8 +15,9 @@ from pathlib import Path
 import configparser
 from typing import List, Tuple, Optional
 import shutil
+import getpass
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 class AWSProfileManager:
     """Main class for managing AWS profiles."""
@@ -89,6 +90,167 @@ class AWSProfileManager:
             return arn.split(':')[-1]
         return arn
     
+    def create_profile(self, profile_name: str) -> bool:
+        """Create a new AWS profile interactively."""
+        if not profile_name:
+            print("❌ Profile name cannot be empty.")
+            return False
+        
+        # Check if profile already exists
+        profiles = self.get_available_profiles()
+        if profile_name in profiles:
+            print(f"❌ Profile '{profile_name}' already exists.")
+            overwrite = input("   Overwrite existing profile? (y/n): ").strip().lower()
+            if overwrite not in ['y', 'yes']:
+                print("❌ Profile creation cancelled.")
+                return False
+        
+        print(f"\n🔧 Creating AWS profile: '{profile_name}'")
+        print("=" * 50)
+        
+        try:
+            # Collect credentials
+            print("📝 Enter AWS credentials:")
+            access_key = input("   AWS Access Key ID: ").strip()
+            if not access_key:
+                print("❌ Access Key ID cannot be empty.")
+                return False
+            
+            # Hide secret key input (basic implementation)
+            import getpass
+            try:
+                secret_key = getpass.getpass("   AWS Secret Access Key: ").strip()
+            except KeyboardInterrupt:
+                print("\n❌ Profile creation cancelled.")
+                return False
+            
+            if not secret_key:
+                print("❌ Secret Access Key cannot be empty.")
+                return False
+            
+            region = input("   Default region (us-east-1): ").strip() or "us-east-1"
+            output_format = input("   Output format (json): ").strip() or "json"
+            
+            print(f"\n🔍 Testing credentials for profile '{profile_name}'...")
+            
+            # Create temporary credentials file to test
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.credentials', delete=False) as temp_creds:
+                temp_creds.write(f"""[{profile_name}]
+aws_access_key_id = {access_key}
+aws_secret_access_key = {secret_key}
+region = {region}
+""")
+                temp_creds_path = temp_creds.name
+            
+            # Test the credentials
+            test_cmd = [
+                'aws', 'sts', 'get-caller-identity',
+                '--profile', profile_name,
+                '--output', 'json'
+            ]
+            
+            # Temporarily set AWS_SHARED_CREDENTIALS_FILE
+            old_creds_file = os.environ.get('AWS_SHARED_CREDENTIALS_FILE')
+            os.environ['AWS_SHARED_CREDENTIALS_FILE'] = temp_creds_path
+            
+            try:
+                result = subprocess.run(
+                    test_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+                
+                if result.returncode == 0:
+                    # Parse account info
+                    data = json.loads(result.stdout)
+                    account_id = data.get('Account', 'Unknown')
+                    user_arn = data.get('Arn', 'Unknown')
+                    username = self.extract_username(user_arn)
+                    
+                    print(f"✅ Credentials validated successfully!")
+                    print(f"   Account: {account_id}")
+                    print(f"   User: {username}")
+                else:
+                    print(f"❌ Credential validation failed:")
+                    print(f"   {result.stderr.strip()}")
+                    return False
+                    
+            finally:
+                # Restore original credentials file setting
+                if old_creds_file:
+                    os.environ['AWS_SHARED_CREDENTIALS_FILE'] = old_creds_file
+                elif 'AWS_SHARED_CREDENTIALS_FILE' in os.environ:
+                    del os.environ['AWS_SHARED_CREDENTIALS_FILE']
+                
+                # Clean up temp file
+                try:
+                    os.unlink(temp_creds_path)
+                except:
+                    pass
+            
+            # Backup existing files
+            if self.credentials_path.exists():
+                backup_creds = self.credentials_path.with_suffix('.credentials.backup')
+                shutil.copy2(self.credentials_path, backup_creds)
+                print(f"📋 Backed up credentials to {backup_creds}")
+            
+            if self.config_path.exists():
+                backup_config = self.config_path.with_suffix('.config.backup')
+                shutil.copy2(self.config_path, backup_config)
+                print(f"📋 Backed up config to {backup_config}")
+            
+            # Ensure AWS directory exists
+            self.credentials_path.parent.mkdir(exist_ok=True)
+            
+            # Update credentials file
+            creds_config = configparser.ConfigParser()
+            if self.credentials_path.exists():
+                creds_config.read(self.credentials_path)
+            
+            if not creds_config.has_section(profile_name):
+                creds_config.add_section(profile_name)
+            
+            creds_config.set(profile_name, 'aws_access_key_id', access_key)
+            creds_config.set(profile_name, 'aws_secret_access_key', secret_key)
+            
+            with open(self.credentials_path, 'w') as f:
+                creds_config.write(f)
+            print(f"✅ Added '{profile_name}' to credentials file")
+            
+            # Update config file
+            config_config = configparser.ConfigParser()
+            if self.config_path.exists():
+                config_config.read(self.config_path)
+            
+            # Profile sections in config are named "profile profilename" (except default)
+            config_section = f"profile {profile_name}" if profile_name != 'default' else profile_name
+            
+            if not config_config.has_section(config_section):
+                config_config.add_section(config_section)
+            
+            config_config.set(config_section, 'region', region)
+            config_config.set(config_section, 'output', output_format)
+            
+            with open(self.config_path, 'w') as f:
+                config_config.write(f)
+            print(f"✅ Added '{profile_name}' to config file")
+            
+            print(f"\n🎉 Successfully created profile '{profile_name}'!")
+            print(f"💡 Test it with: awsprofile {profile_name}")
+            return True
+            
+        except subprocess.TimeoutExpired:
+            print("❌ Credential validation timed out. Check your network connection.")
+            return False
+        except json.JSONDecodeError:
+            print("❌ Invalid response from AWS. Check your credentials.")
+            return False
+        except Exception as e:
+            print(f"❌ Error creating profile: {str(e)}")
+            return False
+
     def delete_profile(self, profile_name: str) -> bool:
         """Delete a profile from AWS credentials and config files."""
         if profile_name == 'default':
@@ -261,6 +423,7 @@ class AWSProfileManager:
             
             print(f"\n🔄 Options:")
             print(f"   1-{len(profiles)}: Switch to profile")
+            print(f"   c: Create a new profile")
             print(f"   d: Delete a profile")
             print(f"   r: Refresh profile list")
             print(f"   q: Quit")
@@ -273,6 +436,19 @@ class AWSProfileManager:
                     break
                 elif choice == 'r':
                     print("🔄 Refreshing...")
+                    continue
+                elif choice == 'c':
+                    # Create profile mode
+                    print("\n🔧 Profile creation mode")
+                    profile_name = input("Enter new profile name: ").strip()
+                    if profile_name:
+                        if self.create_profile(profile_name):
+                            # Refresh profiles list after creation
+                            profiles = self.get_available_profiles()
+                        else:
+                            print("❌ Profile creation failed.")
+                    else:
+                        print("❌ Profile name cannot be empty.")
                     continue
                 elif choice == 'd':
                     # Delete profile mode
@@ -311,7 +487,7 @@ class AWSProfileManager:
                     else:
                         print(f"❌ Please enter a number between 1 and {len(profiles)}")
                 except ValueError:
-                    print("❌ Please enter a valid number, 'd' to delete, 'r' to refresh, or 'q' to quit")
+                    print("❌ Please enter a valid number, 'c' to create, 'd' to delete, 'r' to refresh, or 'q' to quit")
                     
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
@@ -324,12 +500,13 @@ class AWSProfileManager:
 def show_help():
     """Show help message."""
     print("AWS Profile Switcher v{}".format(__version__))
-    print("\nA simple tool to view, switch, and delete AWS profiles.")
+    print("\nA simple tool to view, switch, create, and delete AWS profiles.")
     print("\nUsage:")
     print("  awsprofile                    # Interactive mode")
     print("  awsprofile list               # Show all profiles")
     print("  awsprofile <profile>          # Switch to specific profile")
     print("  awsprofile <profile> --shell  # Output shell export command")
+    print("  awsprofile create <profile>   # Create a new profile")
     print("  awsprofile delete <profile>   # Delete a profile")
     print("  awsprofile --help             # Show this help")
     print("  awsprofile --version          # Show version")
@@ -337,6 +514,7 @@ def show_help():
     print("  awsprofile                    # Start interactive mode")
     print("  awsprofile work               # Switch to 'work' profile")
     print("  awsprofile list               # List all available profiles")
+    print("  awsprofile create dev         # Create 'dev' profile interactively")
     print("  awsprofile delete old-profile # Delete 'old-profile'")
     print("  eval \"$(awsprofile work --shell)\" # Switch for current shell")
     print("\nShell Integration:")
@@ -412,7 +590,9 @@ def main():
         command = sys.argv[1]
         arg = sys.argv[2]
         
-        if command == 'delete':
+        if command == 'create':
+            manager.create_profile(arg)
+        elif command == 'delete':
             manager.delete_profile(arg)
         elif arg == '--shell':
             # Switch profile in shell mode

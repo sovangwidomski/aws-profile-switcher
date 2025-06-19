@@ -1,12 +1,19 @@
-# 🔧 AWS Profile Switcher v1.1.0
+# 🔧 AWS Profile Switcher v1.2.0
 
-A simple, interactive command-line tool to view, switch, and delete AWS profiles with ease. Perfect for developers working with multiple AWS accounts, especially when using tools like AWS CDK in virtual environments.
+A simple, interactive command-line tool to create, view, switch, and delete AWS profiles with ease. Perfect for developers working with multiple AWS accounts, especially when using tools like AWS CDK in virtual environments.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![AWS CLI](https://img.shields.io/badge/AWS-CLI-orange.svg)](https://aws.amazon.com/cli/)
 
-## ✨ New Features in v1.1.0
+## ✨ New Features in v1.2.0
+
+- 🔧 **Profile creation** - Create new AWS profiles interactively with credential validation
+- 🛡️ **Credential testing** - Validates AWS credentials before saving profiles
+- 📁 **Smart backups** - Automatic backup before modifying credentials/config files
+- 💫 **Complete CRUD** - Create, Read, Update, Delete - full profile lifecycle management
+
+## ✨ Features from v1.1.0
 
 - 🗑️ **Profile deletion** - Remove profiles safely with backup
 - 🐚 **Shell integration** - Works with CDK, virtual environments, and any shell tools
@@ -15,6 +22,7 @@ A simple, interactive command-line tool to view, switch, and delete AWS profiles
 
 ## ✨ All Features
 
+- 🔧 **Create new AWS profiles** with interactive credential input and validation
 - 📋 **List all available AWS profiles** with account information
 - 🔄 **Interactive profile switching** with numbered selection
 - 🗑️ **Safe profile deletion** with automatic backups
@@ -119,6 +127,7 @@ awsprofile
 This opens an interactive menu where you can:
 - See all profiles with account information
 - Switch profiles by entering a number
+- Create new profiles with guided setup
 - Delete profiles safely
 - Refresh the profile list
 - Quit when done
@@ -135,6 +144,9 @@ awsprofile work
 # Switch with shell export (for scripts)
 eval "$(awsprofile work --shell)"
 
+# Create a new profile
+awsprofile create staging
+
 # Delete a profile
 awsprofile delete old-profile
 
@@ -150,7 +162,7 @@ awsprofile --version
 ### Interactive Mode with New Features
 
 ```
-🔧 AWS Profile Manager v1.1.0
+🔧 AWS Profile Manager v1.2.0
 ============================================================
 📍 Current profile: default
    Account: 123456789012
@@ -167,22 +179,61 @@ awsprofile --version
 
 🔄 Options:
    1-3: Switch to profile
+   c: Create a new profile
    d: Delete a profile
    r: Refresh profile list
    q: Quit
 
-Select option: 2
+Select option: c
 
-🔍 Testing profile 'work'...
-✅ Successfully switched to profile 'work'
-   Account: 987654321098
-   User: admin
+🔧 Profile creation mode
+Enter new profile name: staging
 
-💡 To use with CDK/tools in current shell:
-   eval "$(awsprofile work --shell)"
+🔧 Creating AWS profile: 'staging'
+==================================================
+📝 Enter AWS credentials:
+   AWS Access Key ID: AKIA1234567890123456
+   AWS Secret Access Key: [hidden]
+   Default region (us-east-1): us-west-2
+   Output format (json): json
 
-💡 Or add this function to ~/.zshrc:
-   awsp() { eval "$(awsprofile "$1" --shell)"; }
+🔍 Testing credentials for profile 'staging'...
+✅ Credentials validated successfully!
+   Account: 555999888777
+   User: staging-user
+
+📋 Backed up credentials to /home/user/.aws/credentials.backup
+📋 Backed up config to /home/user/.aws/config.backup
+✅ Added 'staging' to credentials file
+✅ Added 'staging' to config file
+
+🎉 Successfully created profile 'staging'!
+💡 Test it with: awsprofile staging
+```
+
+### Profile Creation
+
+```bash
+# Create a new profile interactively
+awsprofile create staging
+
+# Output:
+🔧 Creating AWS profile: 'staging'
+==================================================
+📝 Enter AWS credentials:
+   AWS Access Key ID: AKIA1234567890123456
+   AWS Secret Access Key: [hidden]
+   Default region (us-east-1): us-west-2
+   Output format (json): json
+
+🔍 Testing credentials for profile 'staging'...
+✅ Credentials validated successfully!
+   Account: 555999888777
+   User: staging-user
+
+✅ Added 'staging' to credentials file
+✅ Added 'staging' to config file
+🎉 Successfully created profile 'staging'!
 ```
 
 ### Profile Deletion
@@ -320,6 +371,16 @@ awsprofile --help
 
 ## 📝 Changelog
 
+### v1.2.0 (2025-06-19)
+- ✨ Added interactive profile creation with credential validation
+- ✨ Added command-line profile creation: `awsprofile create <profile-name>`
+- ✨ Added automatic credential testing before saving profiles
+- ✨ Added 'c' option in interactive mode for creating profiles
+- 🔧 Enhanced backup system for both creation and deletion
+- 🔧 Improved error handling for invalid credentials
+- 📚 Updated documentation with profile creation examples
+- 🧪 Added comprehensive tests for profile creation functionality
+
 ### v1.1.0 (2025-06-19)
 - ✨ Added profile deletion functionality with automatic backups
 - ✨ Added shell integration for CDK and virtual environment support
@@ -340,12 +401,14 @@ awsprofile --help
 
 Ideas for future versions:
 - [ ] **MFA support** - handle multi-factor authentication seamlessly
-- [ ] **Profile templates** - quick setup for common configurations
+- [ ] **Profile templates** - quick setup for common configurations with predefined settings
 - [ ] **Config file validation** - check for common configuration issues
-- [ ] **Cross-region switching** - easily switch default regions
+- [ ] **Cross-region switching** - easily switch default regions per profile
 - [ ] **Integration with AWS SSO** - support for AWS Single Sign-On
 - [ ] **Profile aliases** - create friendly names for profiles
 - [ ] **Automatic profile backup/restore** - version control for profiles
+- [ ] **Bulk operations** - create/delete multiple profiles at once
+- [ ] **Profile import/export** - share profile configurations (without credentials)
 
 ## 📄 License
 

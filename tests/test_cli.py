@@ -238,11 +238,109 @@ output = json
             config_config = configparser.ConfigParser()
             config_config.read(manager.config_path)
             assert not config_config.has_section('profile work')
+    
+    def test_create_profile_empty_name(self):
+        """Test creating profile with empty name."""
+        manager = AWSProfileManager()
+        result = manager.create_profile('')
+        assert result is False
+    
+    def test_create_profile_already_exists_decline(self, temp_aws_dir):
+        """Test creating profile that already exists - user declines overwrite."""
+        with patch('builtins.input', return_value='n'):
+            manager = AWSProfileManager()
+            result = manager.create_profile('work')  # 'work' profile exists in fixture
+            assert result is False
+    
+    @patch('subprocess.run')
+    @patch('builtins.input')
+    @patch('getpass.getpass')
+    def test_create_profile_success(self, mock_getpass, mock_input, mock_run, temp_aws_dir):
+        """Test successful profile creation."""
+        # Mock user inputs
+        mock_input.side_effect = ['AKIA123456789', 'us-west-1', 'json']
+        mock_getpass.return_value = 'secretkey123'
+        
+        # Mock successful AWS validation
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout='{"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/newuser"}'
+        )
+        
+        manager = AWSProfileManager()
+        result = manager.create_profile('newprofile')
+        assert result is True
+        
+        # Verify profile was added to available profiles
+        profiles = manager.get_available_profiles()
+        assert 'newprofile' in profiles
+    
+    @patch('subprocess.run')
+    @patch('builtins.input')
+    @patch('getpass.getpass')
+    def test_create_profile_invalid_credentials(self, mock_getpass, mock_input, mock_run, temp_aws_dir):
+        """Test profile creation with invalid credentials."""
+        # Mock user inputs
+        mock_input.side_effect = ['AKIA123456789', 'us-west-1', 'json']
+        mock_getpass.return_value = 'badkey'
+        
+        # Mock failed AWS validation
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stderr='The security token included in the request is invalid.'
+        )
+        
+        manager = AWSProfileManager()
+        result = manager.create_profile('badprofile')
+        assert result is False
+    
+    @patch('builtins.input')
+    def test_create_profile_empty_access_key(self, mock_input, temp_aws_dir):
+        """Test profile creation with empty access key."""
+        mock_input.return_value = ''  # Empty access key
+        
+        manager = AWSProfileManager()
+        result = manager.create_profile('testprofile')
+        assert result is False
+    
+    @patch('builtins.input')
+    @patch('getpass.getpass')
+    def test_create_profile_empty_secret_key(self, mock_input, mock_getpass, temp_aws_dir):
+        """Test profile creation with empty secret key."""
+        mock_input.return_value = 'AKIA123456789'
+        mock_getpass.return_value = ''  # Empty secret key
+        
+        manager = AWSProfileManager()
+        result = manager.create_profile('testprofile')
+        assert result is False
+    
+    @patch('builtins.input')
+    @patch('getpass.getpass')
+    def test_create_profile_keyboard_interrupt(self, mock_input, mock_getpass, temp_aws_dir):
+        """Test profile creation interrupted by user."""
+        mock_input.return_value = 'AKIA123456789'
+        mock_getpass.side_effect = KeyboardInterrupt()
+        
+        manager = AWSProfileManager()
+        result = manager.create_profile('testprofile')
+        assert result is False
 
 
 class TestCLIIntegration:
     """Test CLI integration and main function."""
     
+    @patch('awsprofile.cli.AWSProfileManager')
+    def test_main_create_profile(self, mock_manager_class):
+        """Test main function with profile creation."""
+        mock_manager = MagicMock()
+        mock_manager_class.return_value = mock_manager
+        
+        with patch('sys.argv', ['awsprofile', 'create', 'new-profile']):
+            from awsprofile.cli import main
+            main()
+            
+        mock_manager.create_profile.assert_called_once_with('new-profile')
+
     @patch('awsprofile.cli.AWSProfileManager')
     def test_main_no_args_interactive(self, mock_manager_class):
         """Test main function with no arguments starts interactive mode."""

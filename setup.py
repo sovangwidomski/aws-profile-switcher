@@ -10,10 +10,10 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="aws-profile-switcher",
-    version="1.1.0",
+    version="1.2.0",
     author="Sovang Widomski",
     author_email="sovang.widomski.cert@gmail.com",
-    description="A simple, interactive tool to view, switch, and delete AWS profiles with shell integration",
+    description="A simple, interactive tool to create, view, switch, and delete AWS profiles with shell integration",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/sovangwidomski/aws-profile-switcher",
