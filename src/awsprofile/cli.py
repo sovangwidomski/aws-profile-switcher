@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AWS Profile Switcher CLI Tool
-A simple, interactive tool to view and switch between AWS profiles.
+AWS Profile Switcher CLI Tool - Enhanced Version
+A simple, interactive tool to view, switch, and delete AWS profiles.
 
 Author: Sovang Widomski
 License: MIT
@@ -14,8 +14,9 @@ import json
 from pathlib import Path
 import configparser
 from typing import List, Tuple, Optional
+import shutil
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 class AWSProfileManager:
     """Main class for managing AWS profiles."""
@@ -88,6 +89,77 @@ class AWSProfileManager:
             return arn.split(':')[-1]
         return arn
     
+    def delete_profile(self, profile_name: str) -> bool:
+        """Delete a profile from AWS credentials and config files."""
+        if profile_name == 'default':
+            print("❌ Cannot delete the 'default' profile.")
+            print("💡 Use 'aws configure' to modify the default profile instead.")
+            return False
+        
+        profiles = self.get_available_profiles()
+        if profile_name not in profiles:
+            print(f"❌ Profile '{profile_name}' not found.")
+            return False
+        
+        # Confirm deletion
+        print(f"⚠️  Are you sure you want to delete profile '{profile_name}'?")
+        print("   This will remove it from both credentials and config files.")
+        confirm = input("   Type 'yes' to confirm: ").strip().lower()
+        
+        if confirm != 'yes':
+            print("❌ Profile deletion cancelled.")
+            return False
+        
+        try:
+            # Backup files first
+            if self.credentials_path.exists():
+                backup_creds = self.credentials_path.with_suffix('.credentials.backup')
+                shutil.copy2(self.credentials_path, backup_creds)
+                print(f"📋 Backed up credentials to {backup_creds}")
+            
+            if self.config_path.exists():
+                backup_config = self.config_path.with_suffix('.config.backup')
+                shutil.copy2(self.config_path, backup_config)
+                print(f"📋 Backed up config to {backup_config}")
+            
+            # Remove from credentials file
+            if self.credentials_path.exists():
+                creds_config = configparser.ConfigParser()
+                creds_config.read(self.credentials_path)
+                
+                if creds_config.has_section(profile_name):
+                    creds_config.remove_section(profile_name)
+                    with open(self.credentials_path, 'w') as f:
+                        creds_config.write(f)
+                    print(f"✅ Removed '{profile_name}' from credentials file")
+            
+            # Remove from config file
+            if self.config_path.exists():
+                config_config = configparser.ConfigParser()
+                config_config.read(self.config_path)
+                
+                # Profile sections in config are named "profile profilename" (except default)
+                config_section = f"profile {profile_name}" if profile_name != 'default' else profile_name
+                
+                if config_config.has_section(config_section):
+                    config_config.remove_section(config_section)
+                    with open(self.config_path, 'w') as f:
+                        config_config.write(f)
+                    print(f"✅ Removed '{profile_name}' from config file")
+            
+            # If this was the current profile, reset to default
+            current_profile = self.get_current_profile()
+            if current_profile == profile_name:
+                os.environ.pop('AWS_PROFILE', None)
+                print(f"🔄 Reset current profile to 'default' (was '{profile_name}')")
+            
+            print(f"✅ Successfully deleted profile '{profile_name}'")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error deleting profile: {str(e)}")
+            return False
+    
     def show_profiles(self) -> None:
         """Display current profile and all available profiles."""
         current = self.get_current_profile()
@@ -148,10 +220,15 @@ class AWSProfileManager:
         
         return True
     
-    def switch_profile(self, profile_name: str) -> bool:
+    def switch_profile(self, profile_name: str, shell_mode: bool = False) -> bool:
         """Switch to a specific AWS profile."""
         if not self.validate_profile(profile_name):
             return False
+        
+        if shell_mode:
+            # Output shell commands for sourcing
+            print(f"export AWS_PROFILE={profile_name}")
+            return True
         
         # Set the environment variable for this session
         os.environ['AWS_PROFILE'] = profile_name
@@ -165,10 +242,10 @@ class AWSProfileManager:
         print(f"   User: {username}")
         
         # Show how to make this permanent
-        print(f"\n💡 To make this permanent for your terminal session:")
-        print(f"   export AWS_PROFILE={profile_name}")
-        print(f"\n💡 To make it permanent globally:")
-        print(f"   echo 'export AWS_PROFILE={profile_name}' >> ~/.zshrc")
+        print(f"\n💡 To use with CDK/tools in current shell:")
+        print(f"   eval \"$(awsprofile {profile_name} --shell)\"")
+        print(f"\n💡 Or add this function to ~/.zshrc:")
+        print("   awsp() { eval \"$(awsprofile \"$1\" --shell)\"; }")
         
         return True
     
@@ -184,6 +261,7 @@ class AWSProfileManager:
             
             print(f"\n🔄 Options:")
             print(f"   1-{len(profiles)}: Switch to profile")
+            print(f"   d: Delete a profile")
             print(f"   r: Refresh profile list")
             print(f"   q: Quit")
             
@@ -196,8 +274,31 @@ class AWSProfileManager:
                 elif choice == 'r':
                     print("🔄 Refreshing...")
                     continue
+                elif choice == 'd':
+                    # Delete profile mode
+                    print("\n🗑️  Profile deletion mode")
+                    print("Available profiles:")
+                    for i, profile in enumerate(profiles, 1):
+                        print(f"   {i}. {profile}")
+                    
+                    try:
+                        del_choice = input("\nEnter profile number to delete (or 'c' to cancel): ").strip().lower()
+                        if del_choice == 'c':
+                            continue
+                        
+                        del_num = int(del_choice)
+                        if 1 <= del_num <= len(profiles):
+                            profile_to_delete = profiles[del_num - 1]
+                            self.delete_profile(profile_to_delete)
+                            # Refresh profiles list after deletion
+                            profiles = self.get_available_profiles()
+                        else:
+                            print(f"❌ Please enter a number between 1 and {len(profiles)}")
+                    except ValueError:
+                        print("❌ Please enter a valid number")
+                    continue
                 
-                # Try to convert to number
+                # Try to convert to number for profile selection
                 try:
                     profile_num = int(choice)
                     if 1 <= profile_num <= len(profiles):
@@ -210,7 +311,7 @@ class AWSProfileManager:
                     else:
                         print(f"❌ Please enter a number between 1 and {len(profiles)}")
                 except ValueError:
-                    print("❌ Please enter a valid number, 'r' to refresh, or 'q' to quit")
+                    print("❌ Please enter a valid number, 'd' to delete, 'r' to refresh, or 'q' to quit")
                     
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
@@ -223,17 +324,67 @@ class AWSProfileManager:
 def show_help():
     """Show help message."""
     print("AWS Profile Switcher v{}".format(__version__))
-    print("\nA simple tool to view and switch between AWS profiles.")
+    print("\nA simple tool to view, switch, and delete AWS profiles.")
     print("\nUsage:")
-    print("  awsprofile              # Interactive mode")
-    print("  awsprofile list         # Show all profiles")
-    print("  awsprofile <profile>    # Switch to specific profile")
-    print("  awsprofile --help       # Show this help")
-    print("  awsprofile --version    # Show version")
+    print("  awsprofile                    # Interactive mode")
+    print("  awsprofile list               # Show all profiles")
+    print("  awsprofile <profile>          # Switch to specific profile")
+    print("  awsprofile <profile> --shell  # Output shell export command")
+    print("  awsprofile delete <profile>   # Delete a profile")
+    print("  awsprofile --help             # Show this help")
+    print("  awsprofile --version          # Show version")
     print("\nExamples:")
-    print("  awsprofile              # Start interactive mode")
-    print("  awsprofile work         # Switch to 'work' profile")
-    print("  awsprofile list         # List all available profiles")
+    print("  awsprofile                    # Start interactive mode")
+    print("  awsprofile work               # Switch to 'work' profile")
+    print("  awsprofile list               # List all available profiles")
+    print("  awsprofile delete old-profile # Delete 'old-profile'")
+    print("  eval \"$(awsprofile work --shell)\" # Switch for current shell")
+    print("\nShell Integration:")
+    print("  Add this to your ~/.zshrc or ~/.bashrc:")
+    print("  awsp() { eval \"$(awsprofile \"$1\" --shell)\"; }")
+    print("  Then use: awsp work")
+
+
+def generate_shell_integration():
+    """Generate shell integration commands."""
+    integration = r'''
+# AWS Profile Switcher Shell Integration
+# Add this to your ~/.zshrc or ~/.bashrc
+
+awsp() {
+    if [ $# -eq 0 ]; then
+        # No arguments - show interactive mode
+        awsprofile
+    else
+        # Switch profile and export to current shell
+        local output
+        output=$(awsprofile "$1" --shell 2>&1)
+        
+        if echo "$output" | grep -q "export AWS_PROFILE"; then
+            # Success - evaluate the export command
+            eval "$output"
+            echo "✅ Switched to AWS profile: $1"
+            echo "   Use 'aws sts get-caller-identity' to verify"
+        else
+            # Error - show the error message
+            echo "$output"
+        fi
+    fi
+}
+
+# Tab completion for awsp function (bash)
+_awsp_completion() {
+    local profiles
+    profiles=$(awsprofile list 2>/dev/null | grep "^  [0-9]" | sed 's/^.*[0-9]\. //' | cut -d' ' -f1)
+    COMPREPLY=($(compgen -W "$profiles" -- "${COMP_WORDS[1]}"))
+}
+complete -F _awsp_completion awsp
+
+# Alternative short aliases
+alias awsl="awsprofile list"     # List profiles
+alias awsi="awsprofile"          # Interactive mode
+'''
+    return integration
 
 
 def main():
@@ -252,9 +403,23 @@ def main():
             print(f"AWS Profile Switcher v{__version__}")
         elif arg == 'list':
             manager.show_profiles()
+        elif arg == '--shell-integration':
+            print(generate_shell_integration())
         else:
             # Switch to specific profile
             manager.switch_profile(arg)
+    elif len(sys.argv) == 3:
+        command = sys.argv[1]
+        arg = sys.argv[2]
+        
+        if command == 'delete':
+            manager.delete_profile(arg)
+        elif arg == '--shell':
+            # Switch profile in shell mode
+            manager.switch_profile(command, shell_mode=True)
+        else:
+            print("❌ Invalid arguments.")
+            print("💡 Use 'awsprofile --help' for usage information.")
     else:
         print("❌ Too many arguments.")
         print("💡 Use 'awsprofile --help' for usage information.")

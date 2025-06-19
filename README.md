@@ -1,19 +1,28 @@
-# 🔧 AWS Profile Switcher
+# 🔧 AWS Profile Switcher v1.1.0
 
-A simple, interactive command-line tool to view and switch between AWS profiles with ease. Perfect for developers working with multiple AWS accounts.
+A simple, interactive command-line tool to view, switch, and delete AWS profiles with ease. Perfect for developers working with multiple AWS accounts, especially when using tools like AWS CDK in virtual environments.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![AWS CLI](https://img.shields.io/badge/AWS-CLI-orange.svg)](https://aws.amazon.com/cli/)
 
-## ✨ Features
+## ✨ New Features in v1.1.0
+
+- 🗑️ **Profile deletion** - Remove profiles safely with backup
+- 🐚 **Shell integration** - Works with CDK, virtual environments, and any shell tools
+- 🔄 **Better environment handling** - Properly exports AWS_PROFILE to current shell
+- 📝 **Tab completion** - Auto-complete profile names in bash/zsh
+
+## ✨ All Features
 
 - 📋 **List all available AWS profiles** with account information
 - 🔄 **Interactive profile switching** with numbered selection
+- 🗑️ **Safe profile deletion** with automatic backups
 - ✅ **Profile validation** - tests credentials before switching
 - 🎯 **Current profile highlighting** - see which profile is active
 - ⚡ **Fast credential verification** - quick account ID lookup
 - 🛡️ **Error handling** - graceful handling of invalid/expired credentials
+- 🐚 **Shell integration** - works with CDK, virtual environments, and shell tools
 - 💡 **Smart suggestions** - shows how to make profile changes permanent
 
 ## 🚀 Quick Start
@@ -26,7 +35,7 @@ A simple, interactive command-line tool to view and switch between AWS profiles 
 
 ### Installation
 
-#### Option 1: Direct Download (Recommended)
+#### Step 1: Install the Tool
 
 ```bash
 # Clone the repository
@@ -36,33 +45,81 @@ cd aws-profile-switcher
 # Install dependencies
 pip3 install -r requirements.txt
 
-# Run the tool
-python3 src/awsprofile/cli.py
+# Install as package (recommended)
+pip3 install -e .
 ```
 
-#### Option 2: Install as Package
+#### Step 2: Set Up Shell Integration (Recommended)
+
+For the best experience with CDK and virtual environments:
 
 ```bash
-# Clone and install
-git clone https://github.com/sovangwidomski/aws-profile-switcher.git
-cd aws-profile-switcher
-pip3 install -e .
+# Download the shell integration
+curl -O https://raw.githubusercontent.com/sovangwidomski/aws-profile-switcher/main/shell_integration.sh
 
-# Use anywhere
-awsprofile
+# Add to your shell config
+echo "source $(pwd)/shell_integration.sh" >> ~/.zshrc   # For zsh
+echo "source $(pwd)/shell_integration.sh" >> ~/.bashrc  # For bash
+
+# Reload your shell
+source ~/.zshrc  # or source ~/.bashrc
+```
+
+Or manually add this function to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+awsp() {
+    if [ $# -eq 0 ]; then
+        awsprofile
+    else
+        local output
+        output=$(awsprofile "$1" --shell 2>&1)
+        if echo "$output" | grep -q "export AWS_PROFILE"; then
+            eval "$output"
+            echo "✅ Switched to AWS profile: $1"
+            aws sts get-caller-identity --output text --query 'Account' 2>/dev/null | sed 's/^/   Account: /'
+        else
+            echo "$output"
+        fi
+    fi
+}
 ```
 
 ## 📖 Usage
 
-### Interactive Mode (Recommended)
+### Shell Integration (Recommended for CDK/Virtual Environments)
+
+After setting up shell integration:
 
 ```bash
-python3 src/awsprofile/cli.py
+# Switch profiles (works in any directory, virtual environment, etc.)
+awsp work          # Switch to 'work' profile
+awsp personal      # Switch to 'personal' profile
+awsp default       # Switch to 'default' profile
+
+# List profiles
+awsl
+
+# Interactive mode
+awsi
+
+# Show current profile
+awsc
+
+# Clear profile (use default)
+awsclear
+```
+
+### Interactive Mode
+
+```bash
+awsprofile
 ```
 
 This opens an interactive menu where you can:
 - See all profiles with account information
 - Switch profiles by entering a number
+- Delete profiles safely
 - Refresh the profile list
 - Quit when done
 
@@ -70,22 +127,30 @@ This opens an interactive menu where you can:
 
 ```bash
 # List all profiles
-python3 src/awsprofile/cli.py list
+awsprofile list
 
 # Switch to specific profile
-python3 src/awsprofile/cli.py work
+awsprofile work
+
+# Switch with shell export (for scripts)
+eval "$(awsprofile work --shell)"
+
+# Delete a profile
+awsprofile delete old-profile
 
 # Show help
-python3 src/awsprofile/cli.py --help
+awsprofile --help
 
 # Show version
-python3 src/awsprofile/cli.py --version
+awsprofile --version
 ```
 
 ## 📋 Example Output
 
+### Interactive Mode with New Features
+
 ```
-🔧 AWS Profile Manager v1.0.0
+🔧 AWS Profile Manager v1.1.0
 ============================================================
 📍 Current profile: default
    Account: 123456789012
@@ -102,6 +167,7 @@ python3 src/awsprofile/cli.py --version
 
 🔄 Options:
    1-3: Switch to profile
+   d: Delete a profile
    r: Refresh profile list
    q: Quit
 
@@ -112,19 +178,60 @@ Select option: 2
    Account: 987654321098
    User: admin
 
-💡 To make this permanent for your terminal session:
-   export AWS_PROFILE=work
+💡 To use with CDK/tools in current shell:
+   eval "$(awsprofile work --shell)"
+
+💡 Or add this function to ~/.zshrc:
+   awsp() { eval "$(awsprofile "$1" --shell)"; }
 ```
 
-## 🛠️ How It Works
+### Profile Deletion
 
-The tool works by:
+```
+Select option: d
 
-1. **Reading AWS credentials** from `~/.aws/credentials`
-2. **Testing each profile** using `aws sts get-caller-identity`
-3. **Displaying account information** for easy identification
-4. **Setting the `AWS_PROFILE` environment variable** for the current session
-5. **Providing instructions** for making changes permanent
+🗑️  Profile deletion mode
+Available profiles:
+   1. default
+   2. work
+   3. personal
+
+Enter profile number to delete (or 'c' to cancel): 3
+
+⚠️  Are you sure you want to delete profile 'personal'?
+   This will remove it from both credentials and config files.
+   Type 'yes' to confirm: yes
+
+📋 Backed up credentials to /home/user/.aws/credentials.backup
+📋 Backed up config to /home/user/.aws/config.backup
+✅ Removed 'personal' from credentials file
+✅ Removed 'personal' from config file
+✅ Successfully deleted profile 'personal'
+```
+
+## 🛠️ CDK and Virtual Environment Usage
+
+The shell integration makes this tool perfect for CDK development:
+
+```bash
+# In any project directory or virtual environment
+cd my-cdk-project
+python -m venv venv
+source venv/bin/activate
+
+# Switch AWS profile for this shell session
+awsp work
+
+# Now CDK uses the 'work' profile
+cdk deploy
+cdk synth
+```
+
+The profile switch persists for:
+- The current shell session
+- Any virtual environments activated in that shell
+- All AWS CLI commands and tools (CDK, SAM, etc.)
+- Any subprocesses launched from that shell
 
 ## ⚙️ Configuration
 
@@ -145,6 +252,7 @@ aws configure --profile personal
 
 - **Credentials:** `~/.aws/credentials`
 - **Config:** `~/.aws/config`
+- **Backups:** `~/.aws/credentials.backup`, `~/.aws/config.backup` (created before deletion)
 
 ## 🔍 Troubleshooting
 
@@ -170,12 +278,17 @@ brew install awscli
 - Ensure your AWS account is active
 - Verify network connectivity to AWS
 
+**"Profile switch doesn't work with CDK"**
+- Make sure you're using the shell integration (`awsp` command)
+- Don't use `awsprofile` directly - use `awsp <profile>` instead
+- Verify with `aws sts get-caller-identity` after switching
+
 ### Debug Mode
 
 For more detailed error information:
 ```bash
 # Run with Python's verbose mode
-python3 -v src/awsprofile/cli.py list
+python3 -v awsprofile list
 ```
 
 ## 🤝 Contributing
@@ -198,14 +311,23 @@ cd aws-profile-switcher
 # Install development dependencies
 pip3 install -r requirements.txt
 
-# Run tests (when available)
-python3 -m pytest tests/
+# Install in development mode
+pip3 install -e .
 
-# Check code style
-python3 -m flake8 src/
+# Test the tool
+awsprofile --help
 ```
 
 ## 📝 Changelog
+
+### v1.1.0 (2025-06-19)
+- ✨ Added profile deletion functionality with automatic backups
+- ✨ Added shell integration for CDK and virtual environment support
+- ✨ Added `--shell` mode for proper environment variable export
+- ✨ Added tab completion for bash and zsh
+- ✨ Added `awsp`, `awsl`, `awsi`, `awsc`, `awsclear` shell aliases
+- 🔧 Improved error handling and user feedback
+- 📚 Enhanced documentation with CDK usage examples
 
 ### v1.0.0 (2025-06-18)
 - Initial release
@@ -217,13 +339,13 @@ python3 -m flake8 src/
 ## 🚀 Future Enhancements
 
 Ideas for future versions:
-- [ ] **Profile aliases** - create friendly names for profiles
-- [ ] **MFA support** - handle multi-factor authentication
+- [ ] **MFA support** - handle multi-factor authentication seamlessly
 - [ ] **Profile templates** - quick setup for common configurations
-- [ ] **Bash/Zsh completion** - tab completion for profile names
 - [ ] **Config file validation** - check for common configuration issues
 - [ ] **Cross-region switching** - easily switch default regions
 - [ ] **Integration with AWS SSO** - support for AWS Single Sign-On
+- [ ] **Profile aliases** - create friendly names for profiles
+- [ ] **Automatic profile backup/restore** - version control for profiles
 
 ## 📄 License
 
@@ -232,8 +354,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - Built for developers frustrated with AWS profile management
-- Inspired by the need for simple, reliable tooling
+- Inspired by the need for simple, reliable tooling that works with CDK
 - Thanks to the AWS CLI team for the excellent underlying tools
+- Special thanks to the CDK community for feedback on virtual environment issues
 
 ## 📞 Support
 
@@ -245,4 +368,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by [Sovang Widomski](https://github.com/sovangwidomski)**
 
-*If this tool saved you time, please ⭐ star the repository!*
+*If this tool saved you time (especially with CDK!), please ⭐ star the repository!*
