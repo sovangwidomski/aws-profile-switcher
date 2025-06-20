@@ -17,7 +17,7 @@ A dead-simple tool to list, switch, and manage AWS profiles for local developmen
 
 ### Option 1: Install from GitHub (Recommended)
 ```bash
-# Install directly from GitHub (replace with your actual repository URL)
+# Install directly from GitHub
 pip install git+https://github.com/sovangwidomski/aws-profile-switcher.git
 
 # Verify installation
@@ -26,7 +26,7 @@ awsprofile --version
 
 ### Option 2: Install from Source
 ```bash
-# Clone the repository (replace with your actual repository URL)
+# Clone the repository
 git clone https://github.com/sovangwidomski/aws-profile-switcher.git
 cd aws-profile-switcher
 
