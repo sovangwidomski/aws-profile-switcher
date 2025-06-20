@@ -6,486 +6,626 @@ Test suite for AWS Profile Switcher
 import pytest
 import os
 import tempfile
-import configparser
-from unittest.mock import patch, MagicMock, mock_open
+import subprocess
+from unittest.mock import patch, MagicMock, call
 from pathlib import Path
-import shutil
+from io import StringIO
 
-# Import the module to test
-from awsprofile.cli import AWSProfileManager
+# Import the functions to test
+from awsprofile.cli import (
+    get_profiles, get_current_profile, switch_profile, list_profiles,
+    show_current_profile, create_profile, delete_profile, clear_profile,
+    create_profile_interactive, delete_profile_interactive, interactive_mode,
+    main
+)
 
 
-class TestAWSProfileManager:
-    """Test cases for AWSProfileManager class."""
+class TestGetProfiles:
+    """Test the get_profiles function."""
     
-    @pytest.fixture
-    def temp_aws_dir(self):
-        """Create a temporary AWS directory for testing."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            aws_dir = Path(temp_dir) / '.aws'
-            aws_dir.mkdir()
-            
-            # Create sample credentials file
-            creds_content = """[default]
-aws_access_key_id = AKIA123456789
-aws_secret_access_key = secret123
-region = us-east-1
-
-[work]
-aws_access_key_id = AKIA987654321
-aws_secret_access_key = secret456
-region = us-west-2
-
-[personal]
-aws_access_key_id = AKIA555666777
-aws_secret_access_key = secret789
-region = eu-west-1
-"""
-            (aws_dir / 'credentials').write_text(creds_content)
-            
-            # Create sample config file
-            config_content = """[default]
-region = us-east-1
-output = json
-
-[profile work]
-region = us-west-2
-output = json
-
-[profile personal]
-region = eu-west-1
-output = json
-"""
-            (aws_dir / 'config').write_text(config_content)
-            
-            # Patch the home directory
-            with patch('pathlib.Path.home', return_value=Path(temp_dir)):
-                yield aws_dir
+    @patch('subprocess.run')
+    def test_get_profiles_success(self, mock_run):
+        """Test successful profile retrieval."""
+        # Mock aws configure list-profiles
+        list_result = MagicMock()
+        list_result.returncode = 0
+        list_result.stdout = "default\nwork\npersonal\n"
+        
+        # Mock sts get-caller-identity calls
+        sts_account_result = MagicMock()
+        sts_account_result.returncode = 0
+        sts_account_result.stdout = "123456789012"
+        
+        sts_user_result = MagicMock()
+        sts_user_result.returncode = 0
+        sts_user_result.stdout = "arn:aws:iam::123456789012:user/testuser"
+        
+        mock_run.side_effect = [
+            list_result,  # list-profiles
+            sts_account_result, sts_user_result,  # default profile
+            sts_account_result, sts_user_result,  # work profile  
+            sts_account_result, sts_user_result,  # personal profile
+        ]
+        
+        profiles = get_profiles()
+        
+        assert 'default' in profiles
+        assert 'work' in profiles
+        assert 'personal' in profiles
+        assert profiles['default']['account'] == '123456789012'
+        assert profiles['default']['user'] == 'arn:aws:iam::123456789012:user/testuser'
     
-    def test_get_current_profile_default(self):
-        """Test getting current profile when no AWS_PROFILE is set."""
-        with patch.dict(os.environ, {}, clear=True):
-            manager = AWSProfileManager()
-            assert manager.get_current_profile() == 'default'
+    @patch('subprocess.run')
+    def test_get_profiles_no_profiles(self, mock_run):
+        """Test when no profiles are configured."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'aws')
+        
+        profiles = get_profiles()
+        assert profiles == {}
     
-    def test_get_current_profile_custom(self):
-        """Test getting current profile when AWS_PROFILE is set."""
+    @patch('subprocess.run')
+    def test_get_profiles_aws_cli_not_found(self, mock_run):
+        """Test when AWS CLI is not installed."""
+        mock_run.side_effect = FileNotFoundError()
+        
+        with pytest.raises(SystemExit):
+            get_profiles()
+    
+    @patch('subprocess.run')
+    def test_get_profiles_invalid_credentials(self, mock_run):
+        """Test handling of invalid credentials."""
+        # Mock aws configure list-profiles
+        list_result = MagicMock()
+        list_result.returncode = 0
+        list_result.stdout = "invalid-profile\n"
+        
+        # Mock failed sts calls
+        sts_result = MagicMock()
+        sts_result.returncode = 1
+        
+        mock_run.side_effect = [
+            list_result,  # list-profiles
+            sts_result, sts_result,  # failed sts calls
+        ]
+        
+        profiles = get_profiles()
+        
+        assert 'invalid-profile' in profiles
+        assert profiles['invalid-profile']['account'] == 'Invalid'
+        assert profiles['invalid-profile']['user'] == 'Unknown'
+    
+    @patch('subprocess.run')
+    def test_get_profiles_timeout(self, mock_run):
+        """Test handling of timeout during profile validation."""
+        list_result = MagicMock()
+        list_result.returncode = 0
+        list_result.stdout = "slow-profile\n"
+        
+        mock_run.side_effect = [
+            list_result,  # list-profiles
+            subprocess.TimeoutExpired(['aws'], 10),  # timeout
+        ]
+        
+        profiles = get_profiles()
+        
+        assert 'slow-profile' in profiles
+        assert profiles['slow-profile']['account'] == 'Invalid'
+        assert profiles['slow-profile']['user'] == 'The config profile could not be found'
+
+
+class TestGetCurrentProfile:
+    """Test the get_current_profile function."""
+    
+    def test_get_current_profile_from_env(self):
+        """Test getting current profile from AWS_PROFILE environment variable."""
         with patch.dict(os.environ, {'AWS_PROFILE': 'work'}):
-            manager = AWSProfileManager()
-            assert manager.get_current_profile() == 'work'
-    
-    def test_get_available_profiles(self, temp_aws_dir):
-        """Test getting list of available profiles."""
-        manager = AWSProfileManager()
-        profiles = manager.get_available_profiles()
-        expected = ['default', 'personal', 'work']  # sorted
-        assert profiles == expected
-    
-    def test_get_available_profiles_no_file(self):
-        """Test handling when credentials file doesn't exist."""
-        with patch('pathlib.Path.exists', return_value=False):
-            manager = AWSProfileManager()
-            profiles = manager.get_available_profiles()
-            assert profiles == []
+            current = get_current_profile()
+            assert current == 'work'
     
     @patch('subprocess.run')
-    def test_get_account_info_success(self, mock_run):
-        """Test successful AWS account info retrieval."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout='{"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/testuser"}'
-        )
-        
-        manager = AWSProfileManager()
-        account, arn = manager.get_account_info('test-profile')
-        
-        assert account == '123456789012'
-        assert arn == 'arn:aws:iam::123456789012:user/testuser'
-        mock_run.assert_called_once()
-    
-    @patch('subprocess.run')
-    def test_get_account_info_failure(self, mock_run):
-        """Test handling AWS account info failure."""
-        mock_run.return_value = MagicMock(
-            returncode=1,
-            stderr='The security token included in the request is invalid.'
-        )
-        
-        manager = AWSProfileManager()
-        account, detail = manager.get_account_info('invalid-profile')
-        
-        assert account == 'Invalid'
-        assert 'security token' in detail
-    
-    @patch('subprocess.run')
-    def test_get_account_info_timeout(self, mock_run):
-        """Test handling AWS timeout."""
-        from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired('aws', 10)
-        
-        manager = AWSProfileManager()
-        account, detail = manager.get_account_info('slow-profile')
-        
-        assert account == 'Timeout'
-        assert 'timed out' in detail
-    
-    def test_extract_username(self):
-        """Test username extraction from ARN."""
-        manager = AWSProfileManager()
-        
-        # Test IAM user ARN
-        arn = 'arn:aws:iam::123456789012:user/testuser'
-        assert manager.extract_username(arn) == 'testuser'
-        
-        # Test assumed role ARN
-        arn = 'arn:aws:sts::123456789012:assumed-role/role-name/session-name'
-        assert manager.extract_username(arn) == 'session-name'
-        
-        # Test simple string
-        assert manager.extract_username('simple') == 'simple'
-    
-    def test_validate_profile_exists(self, temp_aws_dir):
-        """Test profile validation for existing profile."""
-        with patch.object(AWSProfileManager, 'get_account_info', return_value=('123456789012', 'arn')):
-            manager = AWSProfileManager()
-            assert manager.validate_profile('work') is True
-    
-    def test_validate_profile_not_exists(self, temp_aws_dir):
-        """Test profile validation for non-existing profile."""
-        manager = AWSProfileManager()
-        assert manager.validate_profile('nonexistent') is False
-    
-    def test_validate_profile_invalid_credentials(self, temp_aws_dir):
-        """Test profile validation with invalid credentials."""
-        with patch.object(AWSProfileManager, 'get_account_info', return_value=('Invalid', 'Bad credentials')):
-            manager = AWSProfileManager()
-            assert manager.validate_profile('work') is False
-    
-    def test_switch_profile_shell_mode(self, temp_aws_dir):
-        """Test profile switching in shell mode."""
-        with patch.object(AWSProfileManager, 'get_account_info', return_value=('123456789012', 'arn')):
-            manager = AWSProfileManager()
-            result = manager.switch_profile('work', shell_mode=True)
-            assert result is True
-    
-    def test_switch_profile_normal_mode(self, temp_aws_dir):
-        """Test profile switching in normal mode."""
-        with patch.object(AWSProfileManager, 'get_account_info', return_value=('123456789012', 'arn:aws:iam::123456789012:user/testuser')):
-            manager = AWSProfileManager()
-            result = manager.switch_profile('work', shell_mode=False)
-            assert result is True
-            assert os.environ.get('AWS_PROFILE') == 'work'
-    
-    def test_delete_profile_default_protection(self, temp_aws_dir):
-        """Test that default profile cannot be deleted."""
-        manager = AWSProfileManager()
-        result = manager.delete_profile('default')
-        assert result is False
-    
-    def test_delete_profile_not_exists(self, temp_aws_dir):
-        """Test deleting a profile that doesn't exist."""
-        manager = AWSProfileManager()
-        result = manager.delete_profile('nonexistent')
-        assert result is False
-    
-    def test_delete_profile_cancelled(self, temp_aws_dir):
-        """Test profile deletion when user cancels."""
-        with patch('builtins.input', return_value='no'):
-            manager = AWSProfileManager()
-            result = manager.delete_profile('personal')
-            assert result is False
-    
-    def test_delete_profile_success(self, temp_aws_dir):
-        """Test successful profile deletion."""
-        with patch('builtins.input', return_value='yes'):
-            manager = AWSProfileManager()
-            result = manager.delete_profile('personal')
-            assert result is True
+    def test_get_current_profile_from_aws_cli(self, mock_run):
+        """Test getting current profile from AWS CLI when no env var set."""
+        with patch.dict(os.environ, {}, clear=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Name                    Value             Source\nprofile               work-profile      profile\n"
+            mock_run.return_value = mock_result
             
-            # Verify profile was removed
-            profiles = manager.get_available_profiles()
-            assert 'personal' not in profiles
-            
-            # Verify backup files were created
-            backup_creds = temp_aws_dir / 'credentials.backup'
-            backup_config = temp_aws_dir / 'config.backup'
-            assert backup_creds.exists()
-            assert backup_config.exists()
-    
-    def test_delete_profile_current_profile_reset(self, temp_aws_dir):
-        """Test that current profile is reset when deleted."""
-        with patch('builtins.input', return_value='yes'):
-            with patch.dict(os.environ, {'AWS_PROFILE': 'personal'}):
-                manager = AWSProfileManager()
-                result = manager.delete_profile('personal')
-                assert result is True
-                assert 'AWS_PROFILE' not in os.environ
+            current = get_current_profile()
+            assert current == 'work-profile'
     
     @patch('subprocess.run')
-    def test_delete_profile_with_config_cleanup(self, mock_run, temp_aws_dir):
-        """Test that profiles are removed from both credentials and config files."""
-        with patch('builtins.input', return_value='yes'):
-            manager = AWSProfileManager()
-            result = manager.delete_profile('work')
-            assert result is True
+    def test_get_current_profile_none(self, mock_run):
+        """Test when no current profile is set."""
+        with patch.dict(os.environ, {}, clear=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Name                    Value             Source\nprofile               <not set>         None\n"
+            mock_run.return_value = mock_result
             
-            # Check credentials file
-            creds_config = configparser.ConfigParser()
-            creds_config.read(manager.credentials_path)
-            assert not creds_config.has_section('work')
-            
-            # Check config file
-            config_config = configparser.ConfigParser()
-            config_config.read(manager.config_path)
-            assert not config_config.has_section('profile work')
+            current = get_current_profile()
+            assert current is None
+
+
+class TestSwitchProfile:
+    """Test the switch_profile function."""
     
-    def test_create_profile_empty_name(self):
-        """Test creating profile with empty name."""
-        manager = AWSProfileManager()
-        result = manager.create_profile('')
-        assert result is False
-    
-    def test_create_profile_already_exists_decline(self, temp_aws_dir):
-        """Test creating profile that already exists - user declines overwrite."""
-        with patch('builtins.input', return_value='n'):
-            manager = AWSProfileManager()
-            result = manager.create_profile('work')  # 'work' profile exists in fixture
-            assert result is False
-    
+    @patch('awsprofile.cli.get_profiles')
     @patch('subprocess.run')
-    @patch('builtins.input')
-    @patch('getpass.getpass')
-    def test_create_profile_success(self, mock_getpass, mock_input, mock_run, temp_aws_dir):
-        """Test successful profile creation."""
-        # Mock user inputs
-        mock_input.side_effect = ['AKIA123456789', 'us-west-1', 'json']
-        mock_getpass.return_value = 'secretkey123'
+    def test_switch_profile_success(self, mock_run, mock_get_profiles):
+        """Test successful profile switching."""
+        mock_get_profiles.return_value = {
+            'work': {'account': '123456789012', 'user': 'arn:aws:iam::123456789012:user/testuser'}
+        }
         
-        # Mock successful AWS validation
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout='{"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/newuser"}'
-        )
+        # Mock successful aws configure get/set calls
+        get_result = MagicMock()
+        get_result.returncode = 0
+        get_result.stdout = "us-west-2"
         
-        manager = AWSProfileManager()
-        result = manager.create_profile('newprofile')
+        set_result = MagicMock()
+        set_result.returncode = 0
+        
+        mock_run.side_effect = [get_result, get_result, set_result, set_result, 
+                               get_result, get_result, set_result, set_result]
+        
+        result = switch_profile('work')
         assert result is True
+    
+    @patch('awsprofile.cli.get_profiles')
+    def test_switch_profile_not_found(self, mock_get_profiles):
+        """Test switching to non-existent profile."""
+        mock_get_profiles.return_value = {'work': {}}
         
-        # Verify profile was added to available profiles
-        profiles = manager.get_available_profiles()
-        assert 'newprofile' in profiles
+        result = switch_profile('nonexistent')
+        assert result is False
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('subprocess.run')
+    def test_switch_profile_aws_error(self, mock_run, mock_get_profiles):
+        """Test handling AWS CLI errors during switch."""
+        mock_get_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'aws')
+        
+        result = switch_profile('work')
+        assert result is False
+
+
+class TestCreateProfile:
+    """Test the create_profile function."""
+    
+    @patch('builtins.input')
+    @patch('subprocess.run')
+    def test_create_profile_success(self, mock_run, mock_input):
+        """Test successful profile creation."""
+        mock_input.side_effect = ['AKIA123456789', 'secretkey123', 'us-west-2', 'json']
+        mock_run.return_value = MagicMock(returncode=0)
+        
+        result = create_profile('newprofile')
+        assert result is True
+    
+    @patch('builtins.input')
+    def test_create_profile_empty_access_key(self, mock_input):
+        """Test profile creation with empty access key."""
+        mock_input.return_value = ''
+        
+        result = create_profile('testprofile')
+        assert result is False
+    
+    @patch('builtins.input')
+    def test_create_profile_keyboard_interrupt(self, mock_input):
+        """Test profile creation interrupted by user."""
+        mock_input.side_effect = KeyboardInterrupt()
+        
+        result = create_profile('testprofile')
+        assert result is False
+
+
+class TestDeleteProfile:
+    """Test the delete_profile function."""
+    
+    @patch('awsprofile.cli.get_profiles')
+    def test_delete_profile_not_found(self, mock_get_profiles):
+        """Test deleting non-existent profile."""
+        mock_get_profiles.return_value = {'work': {}}
+        
+        result = delete_profile('nonexistent')
+        assert result is False
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('builtins.input')
+    def test_delete_profile_cancelled(self, mock_input, mock_get_profiles):
+        """Test profile deletion when user cancels."""
+        mock_get_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_input.return_value = 'n'
+        
+        result = delete_profile('work')
+        assert result is False
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('builtins.input')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    @patch('pathlib.Path.write_text')
+    def test_delete_profile_success(self, mock_write, mock_read, mock_exists, mock_input, mock_get_profiles):
+        """Test successful profile deletion."""
+        mock_get_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_input.return_value = 'yes'
+        mock_exists.return_value = True
+        mock_read.return_value = "[work]\naws_access_key_id = test\n[other]\nkey = value"
+        
+        result = delete_profile('work')
+        assert result is True
+
+
+class TestClearProfile:
+    """Test the clear_profile function."""
+    
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    @patch('pathlib.Path.write_text')
+    def test_clear_profile_success(self, mock_write, mock_read, mock_exists):
+        """Test successful profile clearing."""
+        mock_exists.return_value = True
+        mock_read.return_value = "[default]\naws_access_key_id = test\n[other]\nkey = value"
+        
+        result = clear_profile()
+        assert result is True
+
+
+class TestInteractiveMode:
+    """Test the interactive_mode function."""
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_quit(self, mock_input, mock_current, mock_profiles):
+        """Test quitting interactive mode."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_input.return_value = 'q'
+        
+        # Should not raise an exception
+        interactive_mode()
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile') 
+    @patch('builtins.input')
+    def test_interactive_mode_refresh_redisplays_menu(self, mock_input, mock_current, mock_profiles):
+        """Test that refresh option redisplays the menu."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_input.side_effect = ['r', 'q']  # refresh, then quit
+        
+        # Should call get_profiles twice (initial + after refresh)
+        interactive_mode()
+        assert mock_profiles.call_count >= 2
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('awsprofile.cli.switch_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_profile_switch_continues(self, mock_input, mock_switch, mock_current, mock_profiles):
+        """Test that profile switching asks to continue and loops back to menu."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_switch.return_value = True
+        mock_input.side_effect = ['1', 'y', 'q']  # switch to profile 1, continue, then quit
+        
+        interactive_mode()
+        mock_switch.assert_called_once_with('work')
+        # Should call get_profiles multiple times due to looping
+        assert mock_profiles.call_count >= 2
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('awsprofile.cli.switch_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_profile_switch_exits(self, mock_input, mock_switch, mock_current, mock_profiles):
+        """Test that user can exit after profile switching."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_switch.return_value = True
+        mock_input.side_effect = ['1', 'n']  # switch to profile 1, don't continue
+        
+        interactive_mode()
+        mock_switch.assert_called_once_with('work')
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('awsprofile.cli.create_profile_interactive')
+    @patch('builtins.input')
+    def test_interactive_mode_create_profile_loops_back(self, mock_input, mock_create, mock_current, mock_profiles):
+        """Test that creating profile loops back to main menu."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_create.return_value = True
+        mock_input.side_effect = ['c', 'q']  # create profile, then quit
+        
+        interactive_mode()
+        mock_create.assert_called_once()
+        # Should call get_profiles multiple times due to looping
+        assert mock_profiles.call_count >= 2
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('awsprofile.cli.delete_profile_interactive')
+    @patch('builtins.input')
+    def test_interactive_mode_delete_profile_loops_back(self, mock_input, mock_delete, mock_current, mock_profiles):
+        """Test that deleting profile loops back to main menu."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_delete.return_value = True
+        mock_input.side_effect = ['d', 'q']  # delete profile, then quit
+        
+        interactive_mode()
+        mock_delete.assert_called_once()
+        # Should call get_profiles multiple times due to looping
+        assert mock_profiles.call_count >= 2
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('awsprofile.cli.clear_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_clear_profile_loops_back(self, mock_input, mock_clear, mock_current, mock_profiles):
+        """Test that clearing profile loops back to main menu."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_clear.return_value = True
+        mock_input.side_effect = ['x', 'q']  # clear profile, then quit
+        
+        interactive_mode()
+        mock_clear.assert_called_once()
+        # Should call get_profiles multiple times due to looping
+        assert mock_profiles.call_count >= 2
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_invalid_option_error_handling(self, mock_input, mock_current, mock_profiles):
+        """Test error handling for invalid options."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_input.side_effect = ['invalid', '', 'q']  # invalid option, empty, then quit
+        
+        # Should not raise an exception
+        interactive_mode()
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_invalid_number_error_handling(self, mock_input, mock_current, mock_profiles):
+        """Test error handling for invalid profile numbers."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_input.side_effect = ['99', '', 'q']  # invalid number, enter, then quit
+        
+        # Should not raise an exception
+        interactive_mode()
+    
+    @patch('awsprofile.cli.get_profiles')
+    def test_interactive_mode_no_profiles(self, mock_profiles):
+        """Test interactive mode when no profiles exist."""
+        mock_profiles.return_value = {}
+        
+        # Should exit gracefully without crashing
+        interactive_mode()
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('builtins.input')
+    def test_interactive_mode_keyboard_interrupt(self, mock_input, mock_current, mock_profiles):
+        """Test handling keyboard interrupt in interactive mode."""
+        mock_profiles.return_value = {'work': {'account': '123', 'user': 'test'}}
+        mock_current.return_value = None
+        mock_input.side_effect = KeyboardInterrupt()
+        
+        # Should handle KeyboardInterrupt gracefully
+        interactive_mode()
+
+
+class TestMainFunction:
+    """Test the main function and CLI argument parsing."""
+    
+    @patch('awsprofile.cli.switch_profile')
+    def test_main_profile_switch(self, mock_switch):
+        """Test main function with profile switching."""
+        with patch('sys.argv', ['awsprofile', '-p', 'work']):
+            main()
+        mock_switch.assert_called_once_with('work')
+    
+    @patch('awsprofile.cli.list_profiles')
+    def test_main_list_command(self, mock_list):
+        """Test main function with list command."""
+        with patch('sys.argv', ['awsprofile', 'list']):
+            main()
+        mock_list.assert_called_once()
+    
+    @patch('awsprofile.cli.show_current_profile')
+    def test_main_current_command(self, mock_current):
+        """Test main function with current command."""
+        with patch('sys.argv', ['awsprofile', 'current']):
+            main()
+        mock_current.assert_called_once()
+    
+    @patch('awsprofile.cli.clear_profile')
+    def test_main_clear_command(self, mock_clear):
+        """Test main function with clear command."""
+        with patch('sys.argv', ['awsprofile', 'clear']):
+            main()
+        mock_clear.assert_called_once()
+    
+    @patch('awsprofile.cli.create_profile')
+    def test_main_create_command(self, mock_create):
+        """Test main function with create command."""
+        with patch('sys.argv', ['awsprofile', 'create', 'newprofile']):
+            main()
+        mock_create.assert_called_once_with('newprofile')
+    
+    @patch('awsprofile.cli.delete_profile')
+    def test_main_delete_command(self, mock_delete):
+        """Test main function with delete command."""
+        with patch('sys.argv', ['awsprofile', 'delete', 'oldprofile']):
+            main()
+        mock_delete.assert_called_once_with('oldprofile')
+    
+    @patch('awsprofile.cli.interactive_mode')
+    def test_main_no_args_interactive(self, mock_interactive):
+        """Test main function with no arguments starts interactive mode."""
+        with patch('sys.argv', ['awsprofile']):
+            main()
+        mock_interactive.assert_called_once()
+
+
+class TestListProfiles:
+    """Test the list_profiles function."""
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.get_current_profile')
+    @patch('builtins.print')
+    def test_list_profiles_with_profiles(self, mock_print, mock_current, mock_profiles):
+        """Test listing profiles when profiles exist."""
+        mock_profiles.return_value = {
+            'work': {'account': '123456789012', 'user': 'arn:aws:iam::123456789012:user/testuser'},
+            'personal': {'account': '987654321098', 'user': 'arn:aws:iam::987654321098:user/myuser'}
+        }
+        mock_current.return_value = 'work'
+        
+        list_profiles()
+        
+        # Should print profile information
+        mock_print.assert_called()
+    
+    @patch('awsprofile.cli.get_profiles')
+    @patch('builtins.print')
+    def test_list_profiles_no_profiles(self, mock_print, mock_profiles):
+        """Test listing profiles when no profiles exist."""
+        mock_profiles.return_value = {}
+        
+        list_profiles()
+        
+        # Should print no profiles message
+        mock_print.assert_called()
+
+
+class TestShowCurrentProfile:
+    """Test the show_current_profile function."""
     
     @patch('subprocess.run')
+    @patch('builtins.print')
+    def test_show_current_profile_with_profile(self, mock_print, mock_run):
+        """Test showing current profile when one is set."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Name                    Value             Source\nprofile               work-profile      profile\n"
+        mock_run.return_value = mock_result
+        
+        show_current_profile()
+        mock_print.assert_called()
+    
+    @patch('subprocess.run')
+    @patch('builtins.print')
+    def test_show_current_profile_no_profile(self, mock_print, mock_run):
+        """Test showing current profile when none is set."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Name                    Value             Source\nprofile               <not set>         None\n"
+        mock_run.return_value = mock_result
+        
+        show_current_profile()
+        mock_print.assert_called()
+
+
+class TestCreateProfileInteractive:
+    """Test the create_profile_interactive function."""
+    
     @patch('builtins.input')
-    @patch('getpass.getpass')
-    def test_create_profile_invalid_credentials(self, mock_getpass, mock_input, mock_run, temp_aws_dir):
-        """Test profile creation with invalid credentials."""
-        # Mock user inputs
-        mock_input.side_effect = ['AKIA123456789', 'us-west-1', 'json']
-        mock_getpass.return_value = 'badkey'
+    @patch('awsprofile.cli.get_profiles')
+    @patch('awsprofile.cli.create_profile')
+    def test_create_profile_interactive_success(self, mock_create, mock_profiles, mock_input):
+        """Test successful interactive profile creation."""
+        mock_input.return_value = 'newprofile'
+        mock_profiles.return_value = {'existing': {}}
+        mock_create.return_value = True
         
-        # Mock failed AWS validation
-        mock_run.return_value = MagicMock(
-            returncode=1,
-            stderr='The security token included in the request is invalid.'
-        )
+        result = create_profile_interactive()
+        assert result is True
+        mock_create.assert_called_once_with('newprofile')
+    
+    @patch('builtins.input')
+    def test_create_profile_interactive_empty_name(self, mock_input):
+        """Test interactive profile creation with empty name."""
+        mock_input.return_value = ''
         
-        manager = AWSProfileManager()
-        result = manager.create_profile('badprofile')
+        result = create_profile_interactive()
         assert result is False
     
     @patch('builtins.input')
-    def test_create_profile_empty_access_key(self, mock_input, temp_aws_dir):
-        """Test profile creation with empty access key."""
-        mock_input.return_value = ''  # Empty access key
+    @patch('awsprofile.cli.get_profiles')
+    def test_create_profile_interactive_existing_profile(self, mock_profiles, mock_input):
+        """Test interactive profile creation with existing profile name."""
+        mock_input.return_value = 'existing'
+        mock_profiles.return_value = {'existing': {}}
         
-        manager = AWSProfileManager()
-        result = manager.create_profile('testprofile')
+        result = create_profile_interactive()
         assert result is False
+
+
+class TestDeleteProfileInteractive:
+    """Test the delete_profile_interactive function."""
     
     @patch('builtins.input')
-    @patch('getpass.getpass')
-    def test_create_profile_empty_secret_key(self, mock_input, mock_getpass, temp_aws_dir):
-        """Test profile creation with empty secret key."""
-        mock_input.return_value = 'AKIA123456789'
-        mock_getpass.return_value = ''  # Empty secret key
+    @patch('awsprofile.cli.delete_profile')
+    def test_delete_profile_interactive_by_number(self, mock_delete, mock_input):
+        """Test interactive profile deletion by number."""
+        profiles = {'work': {}, 'personal': {}}
+        mock_input.return_value = '1'
+        mock_delete.return_value = True
         
-        manager = AWSProfileManager()
-        result = manager.create_profile('testprofile')
-        assert result is False
+        result = delete_profile_interactive(profiles)
+        assert result is True
+        mock_delete.assert_called_once_with('work')
     
     @patch('builtins.input')
-    @patch('getpass.getpass')
-    def test_create_profile_keyboard_interrupt(self, mock_input, mock_getpass, temp_aws_dir):
-        """Test profile creation interrupted by user."""
-        mock_input.return_value = 'AKIA123456789'
-        mock_getpass.side_effect = KeyboardInterrupt()
+    @patch('awsprofile.cli.delete_profile')
+    def test_delete_profile_interactive_by_name(self, mock_delete, mock_input):
+        """Test interactive profile deletion by name."""
+        profiles = {'work': {}, 'personal': {}}
+        mock_input.return_value = 'personal'
+        mock_delete.return_value = True
         
-        manager = AWSProfileManager()
-        result = manager.create_profile('testprofile')
+        result = delete_profile_interactive(profiles)
+        assert result is True
+        mock_delete.assert_called_once_with('personal')
+    
+    @patch('builtins.input')
+    def test_delete_profile_interactive_invalid_number(self, mock_input):
+        """Test interactive profile deletion with invalid number."""
+        profiles = {'work': {}}
+        mock_input.return_value = '99'
+        
+        result = delete_profile_interactive(profiles)
+        assert result is False
+    
+    def test_delete_profile_interactive_no_profiles(self):
+        """Test interactive profile deletion with no profiles."""
+        result = delete_profile_interactive({})
         assert result is False
 
 
-class TestCLIIntegration:
-    """Test CLI integration and main function."""
-    
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_switch_profile_with_suggestion(self, mock_manager_class):
-        """Test main function switching profile with shell integration suggestion."""
-        mock_manager = MagicMock()
-        mock_manager.get_available_profiles.return_value = ['default', 'work']
-        mock_manager.check_shell_integration.return_value = True
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'work']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.switch_profile.assert_called_once_with('work')
-        mock_manager.check_shell_integration.assert_called_once()
-
-class TestCLIMainFunction:
-    def test_main_create_profile(self, mock_manager_class):
-        """Test main function with profile creation."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'create', 'new-profile']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.create_profile.assert_called_once_with('new-profile')
-
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_no_args_interactive(self, mock_manager_class):
-        """Test main function with no arguments starts interactive mode."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.interactive_mode.assert_called_once()
-    
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_list_command(self, mock_manager_class):
-        """Test main function with list command."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'list']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.show_profiles.assert_called_once()
-    
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_switch_profile(self, mock_manager_class):
-        """Test main function with profile switch."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'work']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.switch_profile.assert_called_once_with('work')
-    
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_delete_profile(self, mock_manager_class):
-        """Test main function with profile deletion."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'delete', 'old-profile']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.delete_profile.assert_called_once_with('old-profile')
-    
-    @patch('awsprofile.cli.AWSProfileManager')
-    def test_main_shell_mode(self, mock_manager_class):
-        """Test main function with shell mode."""
-        mock_manager = MagicMock()
-        mock_manager_class.return_value = mock_manager
-        
-        with patch('sys.argv', ['awsprofile', 'work', '--shell']):
-            from awsprofile.cli import main
-            main()
-            
-        mock_manager.switch_profile.assert_called_once_with('work', shell_mode=True)
-    
-    def test_main_help(self, capsys):
-        """Test main function with help argument."""
-        with patch('sys.argv', ['awsprofile', '--help']):
-            from awsprofile.cli import main
-            main()
-            
-        captured = capsys.readouterr()
-        assert 'AWS Profile Switcher' in captured.out
-        assert 'Usage:' in captured.out
-    
-    def test_main_version(self, capsys):
-        """Test main function with version argument."""
-        with patch('sys.argv', ['awsprofile', '--version']):
-            from awsprofile.cli import main
-            main()
-            
-        captured = capsys.readouterr()
-        assert 'AWS Profile Switcher v' in captured.out
-
-
-class TestShellIntegration:
-    """Test shell integration functionality."""
-    
-    def test_generate_shell_integration(self):
-        """Test shell integration script generation."""
-        from awsprofile.cli import generate_shell_integration
-        
-        integration = generate_shell_integration()
-        
-        assert 'awsp()' in integration
-        assert 'export AWS_PROFILE' in integration
-        assert 'complete -F _awsp_completion awsp' in integration
-        assert 'compdef _awsp_zsh_completion awsp' in integration
-
-
-# Performance and edge case tests
+# Integration and edge case tests
 class TestEdgeCases:
     """Test edge cases and error conditions."""
     
-    @patch('pathlib.Path.exists')
-    def test_missing_aws_directory(self, mock_exists):
-        """Test behavior when .aws directory doesn't exist."""
-        mock_exists.return_value = False
-        manager = AWSProfileManager()
-        profiles = manager.get_available_profiles()
-        assert profiles == []
-    
-    @patch('configparser.ConfigParser.read')
-    def test_corrupted_credentials_file(self, mock_read):
-        """Test handling of corrupted credentials file."""
-        mock_read.side_effect = configparser.Error("Corrupted file")
-        manager = AWSProfileManager()
-        
-        # Should handle the exception gracefully
-        try:
-            profiles = manager.get_available_profiles()
-            # If it doesn't raise an exception, test passes
-            assert True
-        except configparser.Error:
-            pytest.fail("Should handle corrupted config file gracefully")
-    
-    def test_very_long_profile_names(self, temp_aws_dir):
+    @patch('awsprofile.cli.get_profiles')
+    def test_very_long_profile_names(self, mock_profiles):
         """Test handling of very long profile names."""
-        # Create a profile with a very long name
         long_name = 'a' * 200
-        manager = AWSProfileManager()
+        mock_profiles.return_value = {}
         
-        # This should not crash the application
-        result = manager.validate_profile(long_name)
-        assert result is False  # Profile doesn't exist, but shouldn't crash
+        # Should not crash the application
+        result = switch_profile(long_name)
+        assert result is False
     
     @patch('subprocess.run')
     def test_network_connectivity_issues(self, mock_run):
@@ -493,11 +633,9 @@ class TestEdgeCases:
         import socket
         mock_run.side_effect = socket.gaierror("Network unreachable")
         
-        manager = AWSProfileManager()
-        account, detail = manager.get_account_info('test-profile')
-        
-        assert account == 'Error'
-        assert 'Network unreachable' in detail or 'gaierror' in detail
+        profiles = get_profiles()
+        # Should handle network issues gracefully
+        assert isinstance(profiles, dict)
 
 
 if __name__ == '__main__':

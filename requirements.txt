@@ -1,6 +1,30 @@
-boto3>=1.26.0
-
-# AWS Profile Switcher Requirements
+# AWS Profile Switcher - Requirements
 # 
-# Note: argparse is included in Python 3.2+ standard library
-# boto3 and aws-cli are expected to be installed separately by users
+# RUNTIME DEPENDENCIES: None
+# This tool uses only Python standard library modules and calls AWS CLI via subprocess.
+# No Python packages need to be installed for normal usage.
+#
+# SYSTEM REQUIREMENTS:
+# - AWS CLI must be installed and available in PATH
+#   Install with: pip install awscli
+#   Or via package manager: brew install awscli (macOS), apt install awscli (Ubuntu), etc.
+#
+# DEVELOPMENT DEPENDENCIES (for contributors):
+# Uncomment the section below if you're developing/testing this project
+
+# Testing
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+
+# Code Quality  
+# black>=22.0.0
+# flake8>=5.0.0
+# mypy>=1.0.0
+
+# Development Tools
+# twine>=4.0.0        # For publishing to PyPI
+# build>=0.8.0        # For building distributions
+
+# INSTALLATION:
+# For users: pip install aws-profile-switcher
+# For developers: pip install -e .[dev]
