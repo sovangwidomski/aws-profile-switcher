@@ -105,7 +105,7 @@ awsprofile delete old-profile       # Delete profile with confirmation
 ## Example Interactive Session
 
 ```
-🔧 AWS Profile Switcher v1.5.0
+🔧 AWS Profile Switcher v1.5.1
 ==================================================
 📍 Current profile: company-dev
    Account: 123456789012
