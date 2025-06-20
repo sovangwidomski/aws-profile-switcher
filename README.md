@@ -1,6 +1,3 @@
-Here's the **complete v1.4.0 README** - just copy and paste this entire thing:
-
-```markdown
 # 🔧 AWS Profile Switcher v1.4.0
 
 A simple, interactive command-line tool to create, view, switch, and delete AWS profiles with ease. Perfect for developers working with multiple AWS accounts, especially when using tools like AWS CDK in virtual environments.
@@ -17,7 +14,7 @@ A simple, interactive command-line tool to create, view, switch, and delete AWS 
 
 ```bash
 # Install
-pip3 install git+https://github.com/username/aws-profile-switcher.git
+pip3 install git+https://github.com/sovangwidomski/aws-profile-switcher.git
 
 # One-time setup for shell integration
 awsprofile setup-shell
