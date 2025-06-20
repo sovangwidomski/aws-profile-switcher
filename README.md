@@ -71,7 +71,7 @@ awsprofile -p client-staging     # ← Use YOUR real profile name here
 
 ```bash
 # 1. Install the tool
-pip3 install git+https://github.com/username/aws-profile-switcher.git
+pip3 install git+https://github.com/sovangwidomski/aws-profile-switcher.git
 
 # 2. One-time setup (automatically configures shell integration)
 awsprofile setup-shell
@@ -93,7 +93,7 @@ awsclear           # Clear profile
 
 ```bash
 # Install
-pip3 install git+https://github.com/username/aws-profile-switcher.git
+pip3 install git+https://github.com/sovangwidomski/aws-profile-switcher.git
 
 # Manually add shell integration
 echo 'awsp() { eval "$(awsprofile -p "$1" --shell)"; }' >> ~/.zshrc
