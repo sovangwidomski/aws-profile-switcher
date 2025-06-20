@@ -1,1 +1,6 @@
 boto3>=1.26.0
+
+# AWS Profile Switcher Requirements
+# 
+# Note: argparse is included in Python 3.2+ standard library
+# boto3 and aws-cli are expected to be installed separately by users

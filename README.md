@@ -410,14 +410,21 @@ aws configure --profile personal
 
 ### Common Issues
 
-**"Profile 'work' not found"**
+**"awsprofile: error: unrecognized arguments"**
 ```bash
-# Problem: You're using an example name that doesn't exist
-awsp work                    # ❌ 
+# Problem: Using old syntax after v1.4.0 upgrade
+awsprofile my-profile        # ❌ Old way (may conflict)
 
-# Solution: Use YOUR actual profile names
-awsl                         # See what profiles you really have
-awsp my-actual-profile-name  # ✅ Use the real name
+# Solution: Use explicit -p flag  
+awsprofile -p my-profile     # ✅ New explicit way
+```
+
+**"Profile 'list' not found" (pre-v1.4.0 issue, now fixed!)**
+```bash
+# This was the old namespace conflict problem, solved in v1.4.0
+# Now commands and profiles never conflict:
+awsprofile list              # ✅ Always the list command
+awsprofile -p list           # ✅ Profile named "list" (if you have one)
 ```
 
 **"No AWS credentials file found"**
@@ -442,17 +449,17 @@ brew install awscli
 
 **"Profile switch doesn't work with CDK"**
 - Make sure you're using the shell integration (`awsp` command)
-- Don't use `awsprofile` directly - use `awsp <YOUR-PROFILE-NAME>` instead
+- Don't use `awsprofile -p` directly for persistent switching
+- Use `awsp <YOUR-PROFILE-NAME>` instead for shell persistence
 - Verify with `aws sts get-caller-identity` after switching
 
 **"I don't know what profile names to use"**
 ```bash
 # See YOUR actual profile names:
 awsprofile list
-# OR
-awsl
 
-# Use whatever names are shown in the output
+# Use whatever names are shown in the output with -p flag
+awsprofile -p <name-from-list>
 ```
 
 **"Tab completion doesn't work"**
@@ -460,6 +467,16 @@ awsl
 # Make sure you ran the setup:
 awsprofile setup-shell
 source ~/.zshrc    # or ~/.bashrc
+```
+
+**"Shell integration commands not found (awsp, awsl, etc.)"**
+```bash
+# Run setup and source your shell config:
+awsprofile setup-shell
+source ~/.zshrc    # or ~/.bashrc
+
+# Verify with:
+awsprofile --help  # Should show shell integration commands in help
 ```
 
 ### Debug Mode
@@ -498,6 +515,16 @@ awsprofile --help
 ```
 
 ## 📝 Changelog
+
+### v1.4.0 (2025-06-19) 
+- 🎯 **Namespace conflicts eliminated**: Commands never conflict with profile names
+- 🔧 **Explicit profile switching**: Use `-p`/`--profile` flag for clear intent
+- 🛡️ **Robust argument parsing**: Professional argparse-based CLI with proper subcommands
+- 📚 **Comprehensive help**: Shell integration commands documented in `--help` output
+- ⚡ **Any profile name works**: Users can have profiles named 'list', 'current', 'create', etc.
+- 🎯 **Breaking change**: Profile switching now requires `-p` flag for disambiguation
+- 🧪 **Enhanced testing**: All edge cases and argument combinations tested
+- 💡 **Better UX**: Clear error messages and improved discoverability
 
 ### v1.3.0 (2025-06-19) 
 - 🎯 **One-command setup**: `awsprofile setup-shell` automatically configures everything
