@@ -1,6 +1,17 @@
-# 🔧 AWS Profile Switcher v1.3.0
+Here's the **complete v1.4.0 README** - just copy and paste this entire thing:
+
+```markdown
+# 🔧 AWS Profile Switcher v1.4.0
 
 A simple, interactive command-line tool to create, view, switch, and delete AWS profiles with ease. Perfect for developers working with multiple AWS accounts, especially when using tools like AWS CDK in virtual environments.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![AWS CLI](https://img.shields.io/badge/AWS-CLI-orange.svg)](https://aws.amazon.com/cli/)
+
+> **🎯 NEW in v1.4.0**: Namespace conflicts eliminated! You can now have profiles named 'list', 'current', 'create', etc. 
+> 
+> Use **`awsprofile -p <profile-name>`** for explicit profile switching. All commands work reliably without conflicts!
 
 ## ⚡ Quick Start
 
@@ -12,47 +23,40 @@ pip3 install git+https://github.com/username/aws-profile-switcher.git
 awsprofile setup-shell
 source ~/.zshrc  # or ~/.bashrc
 
-# Find your actual profile names:
-awsl            # List YOUR profiles
+# See your actual profile names:
+awsprofile list
 
-# Use YOUR actual profile names (not "work"!):
-awsp production    # ← Replace "production" with YOUR profile name
-awsp staging       # ← Replace "staging" with YOUR profile name  
-awsp personal      # ← Replace "personal" with YOUR profile name
+# Switch profiles using the explicit -p flag:
+awsprofile -p my-company-prod    # ← Use YOUR real profile name here
+awsprofile -p personal-aws       # ← Use YOUR real profile name here  
+awsprofile -p client-staging     # ← Use YOUR real profile name here
 ```
 
-> **⚠️ Important**: "production", "staging", "personal" are just **examples**! 
-> Use `awsl` to see YOUR actual profile names, then use those names with `awsp`.
+> **⚠️ Important**: "my-company-prod", "personal-aws" are just **examples**! 
+> Use `awsprofile list` to see YOUR actual profile names, then use those with `-p`.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![AWS CLI](https://img.shields.io/badge/AWS-CLI-orange.svg)](https://aws.amazon.com/cli/)
+## ✨ New Features in v1.4.0
 
-## ✨ New Features in v1.3.0
+- 🎯 **Namespace conflicts eliminated** - Commands never conflict with profile names
+- 🔧 **Explicit profile switching** - Use `-p` flag for clear intent: `awsprofile -p <name>`
+- 🛡️ **Robust argument parsing** - Professional argparse-based CLI with proper subcommands
+- 📚 **Comprehensive help** - Shell integration commands documented in `--help`
+- ⚡ **Any profile name works** - Have profiles named 'list', 'current', 'create', etc.
 
-- 🎯 **One-command setup** - `awsprofile setup-shell` does everything automatically
-- 🧠 **Smart detection** - Automatically detects shell type and sets up integration
-- 📝 **Auto tab completion** - Profile name completion included in setup
-- 💡 **Helpful suggestions** - Tool suggests using shell integration when available
-- 🔄 **Current profile command** - `awsprofile current` shows active profile
+## ✨ Features from Previous Versions
 
-## ✨ Features from v1.2.0
-
-- 🔧 **Profile creation** - Create new AWS profiles interactively with credential validation
-- 🛡️ **Credential testing** - Validates AWS credentials before saving profiles
-- 📁 **Smart backups** - Automatic backup before modifying credentials/config files
-- 💫 **Complete CRUD** - Create, Read, Update, Delete - full profile lifecycle management
-
-## ✨ Features from v1.1.0
-
-- 🗑️ **Profile deletion** - Remove profiles safely with backup
-- 🐚 **Shell integration** - Works with CDK, virtual environments, and any shell tools
-- 🔄 **Better environment handling** - Properly exports AWS_PROFILE to current shell
-- 📝 **Tab completion** - Auto-complete profile names in bash/zsh
+- 🔧 **Profile creation** - Create new AWS profiles interactively with credential validation (v1.2.0)
+- 🛡️ **Credential testing** - Validates AWS credentials before saving profiles (v1.2.0)
+- 📁 **Smart backups** - Automatic backup before modifying credentials/config files (v1.2.0)
+- 💫 **Complete CRUD** - Create, Read, Update, Delete - full profile lifecycle management (v1.2.0)
+- 🗑️ **Profile deletion** - Remove profiles safely with backup (v1.1.0)
+- 🐚 **Shell integration** - Works with CDK, virtual environments, and any shell tools (v1.1.0)
+- 🔄 **Better environment handling** - Properly exports AWS_PROFILE to current shell (v1.1.0)
+- 📝 **Tab completion** - Auto-complete profile names in bash/zsh (v1.1.0)
 
 ## ✨ All Features
 
-- ⚡ **One-command setup** - `setup-shell` automatically configures everything
+- ⚡ **Namespace conflict-free** - Commands and profiles never interfere 
 - 🔧 **Create new AWS profiles** with interactive credential input and validation
 - 📋 **List all available AWS profiles** with account information
 - 🔄 **Interactive profile switching** with numbered selection
@@ -64,136 +68,294 @@ awsp personal      # ← Replace "personal" with YOUR profile name
 - 🐚 **Shell integration** - works with CDK, virtual environments, and shell tools
 - 💡 **Smart suggestions** - shows how to make profile changes permanent
 
-## 🚀 Quick Start
+## 📦 Installation & Setup
 
-### Prerequisites
-
-- Python 3.8+ 
-- AWS CLI v2 installed and configured
-- At least one AWS profile configured (`aws configure`)
-
-### Installation
-
-#### Step 1: Install the Tool
+### Method 1: Simple Install (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/sovangwidomski/aws-profile-switcher.git
-cd aws-profile-switcher
+# 1. Install the tool
+pip3 install git+https://github.com/username/aws-profile-switcher.git
 
-# Install dependencies
-pip3 install -r requirements.txt
+# 2. One-time setup (automatically configures shell integration)
+awsprofile setup-shell
 
-# Install as package (recommended)
-pip3 install -e .
-```
+# 3. Reload your shell config
+source ~/.zshrc    # for zsh
+# OR
+source ~/.bashrc   # for bash
 
-#### Step 2: Set Up Shell Integration (Recommended)
-
-For the best experience with CDK and virtual environments:
-
-```bash
-# Download the shell integration
-curl -O https://raw.githubusercontent.com/sovangwidomski/aws-profile-switcher/main/shell_integration.sh
-
-# Add to your shell config
-echo "source $(pwd)/shell_integration.sh" >> ~/.zshrc   # For zsh
-echo "source $(pwd)/shell_integration.sh" >> ~/.bashrc  # For bash
-
-# Reload your shell
-source ~/.zshrc  # or source ~/.bashrc
-```
-
-Or manually add this function to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-awsp() {
-    if [ $# -eq 0 ]; then
-        awsprofile
-    else
-        local output
-        output=$(awsprofile "$1" --shell 2>&1)
-        if echo "$output" | grep -q "export AWS_PROFILE"; then
-            eval "$output"
-            echo "✅ Switched to AWS profile: $1"
-            aws sts get-caller-identity --output text --query 'Account' 2>/dev/null | sed 's/^/   Account: /'
-        else
-            echo "$output"
-        fi
-    fi
-}
-```
-
-## 📖 Usage
-
-### Shell Integration (Recommended for CDK/Virtual Environments)
-
-After setting up shell integration:
-
-```bash
-# Switch profiles (works in any directory, virtual environment, etc.)
+# 4. That's it! Now use the simple commands:
 awsp work          # Switch to 'work' profile
-awsp personal      # Switch to 'personal' profile
-awsp default       # Switch to 'default' profile
-
-# List profiles
-awsl
-
-# Interactive mode
-awsi
-
-# Show current profile
-awsc
-
-# Clear profile (use default)
-awsclear
+awsl               # List all profiles  
+awsi               # Interactive mode
+awsc               # Show current profile
+awsclear           # Clear profile
 ```
 
-### Interactive Mode
+### Method 2: Manual Setup (If you prefer)
 
 ```bash
-awsprofile
+# Install
+pip3 install git+https://github.com/username/aws-profile-switcher.git
+
+# Manually add shell integration
+echo 'awsp() { eval "$(awsprofile -p "$1" --shell)"; }' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-This opens an interactive menu where you can:
-- See all profiles with account information
-- Switch profiles by entering a number
-- Create new profiles with guided setup
-- Delete profiles safely
-- Refresh the profile list
-- Quit when done
+## 🔍 Find Your Profile Names First!
 
-### Command Line Options
+Before using the tool, see what AWS profiles you actually have:
 
 ```bash
-# List all profiles
+# List your profiles (shows account info too):
 awsprofile list
 
-# Switch to specific profile
-awsprofile work
-
-# Switch with shell export (for scripts)
-eval "$(awsprofile work --shell)"
-
-# Create a new profile
-awsprofile create staging
-
-# Delete a profile
-awsprofile delete old-profile
-
-# Show help
-awsprofile --help
-
-# Show version
-awsprofile --version
+# Example output:
+📋 Available profiles (3 total):
+----------------------------------------
+✅  1. default
+       Account: 123456789012
+   2. my-company-prod
+       Account: 987654321098  
+   3. john-personal
+       Account: 555666777888
 ```
 
-## 📋 Example Output
+**Now use YOUR actual profile names:**
+```bash
+awsprofile -p my-company-prod    # ← Use YOUR profile name here
+awsprofile -p john-personal      # ← Use YOUR profile name here
+awsprofile -p default            # ← This one everyone has
+```
 
-### Interactive Mode with New Features
+> **📝 Note**: Profile names like "work", "staging", "production" in this README are just **examples**. Your actual profile names might be "my-company-dev", "client-xyz", "personal-aws", etc. Always use YOUR real profile names with the `-p` flag!
+
+## 🐚 Shell Integration (The Easy Way!)
+
+### One-Time Setup
+```bash
+# This does everything automatically:
+awsprofile setup-shell
+source ~/.zshrc  # or ~/.bashrc
+```
+
+**That's it!** The tool automatically:
+- Detects your shell (bash/zsh)
+- Adds all the integration functions
+- Sets up tab completion
+- Creates backups of your config files
+
+### Now You Have These Commands:
+
+> **⚠️ Remember**: Replace the example profile names below with YOUR actual profile names!
+
+```bash
+# First, see what profiles YOU have:
+awsprofile list                 # List YOUR profiles
+
+# Then switch using YOUR actual profile names:
+awsp my-company-prod            # ← Example: replace with YOUR profile name
+awsp john-dev                   # ← Example: replace with YOUR profile name  
+awsp client-staging             # ← Example: replace with YOUR profile name
+
+# Other useful commands:
+awsl                           # List all profiles (same as: awsprofile list)
+awsi                           # Interactive mode (same as: awsprofile)
+awsc                           # Show current profile (same as: awsprofile current)
+awsclear                       # Clear AWS_PROFILE environment variable
+```
+
+### Perfect for CDK Development:
+```bash
+cd my-cdk-project
+python -m venv venv
+source venv/bin/activate
+
+# First see your profiles:
+awsprofile list
+# Output might show: default, my-company-prod, my-personal
+
+# Switch to YOUR actual profile:
+awsp my-company-prod           # ← Use YOUR real profile name here
+cdk deploy                     # Uses 'my-company-prod' profile ✅
+aws s3 ls                      # Uses 'my-company-prod' profile ✅
+```
+
+### ❌ Don't Do This:
+```bash
+awsp work                      # ❌ Only works if you actually have a profile named "work"
+awsp production                # ❌ Only works if you actually have a profile named "production"
+```
+
+### ✅ Do This Instead:
+```bash
+awsprofile list                # First, see YOUR actual profile names
+awsp <YOUR-REAL-PROFILE-NAME>  # Use whatever the list showed you
+```
+
+## 🚀 Basic Usage
+
+### Step 1: See What Profiles You Have
+```bash
+awsprofile list         # Detailed list with account info
+```
+
+### Step 2: Use YOUR Actual Profile Names
+
+**New v1.4.0 explicit syntax (recommended):**
+```bash
+# Use the explicit -p flag for profile switching:
+awsprofile -p company-prod       # Switch to 'company-prod' profile  
+awsprofile -p personal-aws       # Switch to 'personal-aws' profile
+awsprofile -p client-dev         # Switch to 'client-dev' profile
+
+# These are just examples! Use whatever 'awsprofile list' showed you.
+```
+
+**Real example:**
+```bash
+$ awsprofile list
+📋 Available profiles (3 total):
+----------------------------------------
+   1. default
+       Account: 123456789012
+   2. my-work-account  
+       Account: 987654321098
+   3. johns-personal
+       Account: 555666777888
+
+$ awsprofile -p my-work-account  # ← Use the actual name from the list above
+✅ Switched to AWS profile: my-work-account
+   Account: 987654321098
+```
+
+### Available Commands:
+```bash
+# Core commands (no conflicts with profile names!):
+awsprofile list                    # List all profiles
+awsprofile current                 # Show current profile
+awsprofile setup-shell             # One-time shell setup
+
+# Profile switching (explicit with -p flag):
+awsprofile -p <YOUR-PROFILE-NAME>  # Switch profiles (use YOUR real name!)
+awsprofile --profile <name>        # Long form flag
+awsprofile -p <name> --shell       # Output shell export command
+
+# Profile management:
+awsprofile create new-client       # Create a new profile
+awsprofile delete old-profile      # Delete a profile
+
+# Help and info:
+awsprofile --help                  # Show comprehensive help
+awsprofile --version               # Show version
+```
+
+### After Shell Integration Setup:
+```bash
+# Simple shell commands (after awsprofile setup-shell):
+awsp <YOUR-PROFILE-NAME>           # Switch profiles (persists in shell)
+awsl                               # List all profiles
+awsi                               # Interactive mode
+awsc                               # Show current profile
+awsclear                           # Clear profile
+```
+
+> **💡 Tip**: Use tab completion! After setup, type `awsp ` and press Tab to see your profile names.
+
+## 🛠️ Key Improvement in v1.4.0: No More Namespace Conflicts!
+
+**Before v1.4.0 (problematic):**
+```bash
+awsprofile list          # ❌ Might be treated as profile named "list"
+awsprofile current       # ❌ Might be treated as profile named "current"
+```
+
+**v1.4.0+ (works perfectly):**
+```bash
+awsprofile list          # ✅ Always the list command
+awsprofile current       # ✅ Always the current command  
+awsprofile -p list       # ✅ Switch to profile named "list" (if you have one)
+awsprofile -p current    # ✅ Switch to profile named "current" (if you have one)
+```
+
+**You can now have profiles with ANY names** - including 'list', 'current', 'create', 'delete', 'setup-shell' - without conflicts!
+
+## 🛠️ CDK and Virtual Environment Usage
+
+The shell integration makes this tool perfect for CDK development:
+
+```bash
+# In any project directory or virtual environment
+cd my-cdk-project
+python -m venv venv
+source venv/bin/activate
+
+# First, see what profiles you have:
+awsprofile list
+# Example output: default, company-prod, company-staging, personal
+
+# Switch AWS profile for this shell session (use YOUR real profile name):
+awsp company-prod       # ← Replace with YOUR actual profile name
+
+# Now CDK uses your chosen profile:
+cdk deploy
+cdk synth
+aws s3 ls               # All AWS commands use the profile you set
+```
+
+**Real-world example:**
+```bash
+$ cd my-react-app-cdk
+$ python -m venv venv  
+$ source venv/bin/activate
+$ awsprofile list
+📋 Available profiles (4 total):
+----------------------------------------
+   1. default
+       Account: 123456789012
+   2. acme-corp-production
+       Account: 987654321098
+   3. acme-corp-staging
+       Account: 555666777888
+   4. john-personal
+       Account: 111222333444
+
+$ awsp acme-corp-staging    # Using the real profile name from the list
+✅ Switched to AWS profile: acme-corp-staging
+   Account: 555666777888
+
+$ cdk deploy MyReactAppStack
+# Deploys to the acme-corp-staging account ✅
+```
+
+The profile switch persists for:
+- The current shell session
+- Any virtual environments activated in that shell
+- All AWS CLI commands and tools (CDK, SAM, etc.)
+- Any subprocesses launched from that shell
+
+### Multiple Projects Example:
+```bash
+# Terminal 1 - Production deployment
+cd project-a
+awsp company-prod       # ← Your real production profile name
+cdk deploy
+
+# Terminal 2 - Development work  
+cd project-b
+awsp company-dev        # ← Your real development profile name
+cdk deploy
+
+# Each terminal remembers its own profile!
+```
+
+> **⚠️ Important**: Always replace "company-prod", "company-dev", etc. with YOUR actual AWS profile names. Use `awsprofile list` to see what profiles you really have.
+
+## 🔧 Interactive Mode
 
 ```
-🔧 AWS Profile Manager v1.3.0
+🔧 AWS Profile Manager v1.4.0
 ============================================================
 📍 Current profile: default
    Account: 123456789012
@@ -241,7 +403,7 @@ Enter new profile name: client-xyz-dev
 ✅ Added 'client-xyz-dev' to config file
 
 🎉 Successfully created profile 'client-xyz-dev'!
-💡 Test it with: awsprofile client-xyz-dev
+💡 Test it with: awsprofile -p client-xyz-dev
 ```
 
 > **📝 Note**: The profile names shown above (like "acme-corp-prod", "john-personal") are just examples. YOUR profiles will have different names based on how you set them up.
@@ -280,11 +442,17 @@ awsprofile create client-xyz-staging    # ← You pick the name
 awsprofile delete old-unused-profile    # ← Replace with real profile name
 
 # Example with real profile names:
-$ awsl
-default
-company-prod
-old-client-profile  
-personal
+$ awsprofile list
+📋 Available profiles (4 total):
+----------------------------------------
+   1. default
+       Account: 123456789012
+   2. company-prod
+       Account: 987654321098
+   3. old-client-profile  
+       Account: 555666777888
+   4. personal
+       Account: 111222333444
 
 $ awsprofile delete old-client-profile
 ⚠️  Are you sure you want to delete profile 'old-client-profile'?
@@ -297,114 +465,6 @@ $ awsprofile delete old-client-profile
 ✅ Removed 'old-client-profile' from config file
 ✅ Successfully deleted profile 'old-client-profile'
 ```
-
-```
-Select option: d
-
-🗑️  Profile deletion mode
-Available profiles:
-   1. default
-   2. work
-   3. personal
-
-Enter profile number to delete (or 'c' to cancel): 3
-
-⚠️  Are you sure you want to delete profile 'personal'?
-   This will remove it from both credentials and config files.
-   Type 'yes' to confirm: yes
-
-📋 Backed up credentials to /home/user/.aws/credentials.backup
-📋 Backed up config to /home/user/.aws/config.backup
-✅ Removed 'personal' from credentials file
-✅ Removed 'personal' from config file
-✅ Successfully deleted profile 'personal'
-```
-
-## 🛠️ CDK and Virtual Environment Usage
-
-The shell integration makes this tool perfect for CDK development:
-
-```bash
-# In any project directory or virtual environment
-cd my-cdk-project
-python -m venv venv
-source venv/bin/activate
-
-# First, see what profiles you have:
-awsl
-# Example output: default, company-prod, company-staging, personal
-
-# Switch AWS profile for this shell session (use YOUR real profile name):
-awsp company-prod       # ← Replace with YOUR actual profile name
-
-# Now CDK uses your chosen profile:
-cdk deploy
-cdk synth
-aws s3 ls               # All AWS commands use the profile you set
-```
-
-**Real-world example:**
-```bash
-$ cd my-react-app-cdk
-$ python -m venv venv  
-$ source venv/bin/activate
-$ awsl
-default
-acme-corp-production
-acme-corp-staging
-john-personal
-
-$ awsp acme-corp-staging    # Using the real profile name from the list
-✅ Switched to AWS profile: acme-corp-staging
-   Account: 555666777888
-
-$ cdk deploy MyReactAppStack
-# Deploys to the acme-corp-staging account ✅
-```
-
-The profile switch persists for:
-- The current shell session
-- Any virtual environments activated in that shell
-- All AWS CLI commands and tools (CDK, SAM, etc.)
-- Any subprocesses launched from that shell
-
-### Multiple Projects Example:
-```bash
-# Terminal 1 - Production deployment
-cd project-a
-awsp company-prod       # ← Your real production profile name
-cdk deploy
-
-# Terminal 2 - Development work  
-cd project-b
-awsp company-dev        # ← Your real development profile name
-cdk deploy
-
-# Each terminal remembers its own profile!
-```
-
-> **⚠️ Important**: Always replace "company-prod", "company-dev", etc. with YOUR actual AWS profile names. Use `awsl` to see what profiles you really have.
-
-## ⚙️ Configuration
-
-### AWS Profiles Setup
-
-If you haven't set up AWS profiles yet:
-
-```bash
-# Configure your first profile (becomes 'default')
-aws configure
-
-# Configure additional profiles
-aws configure --profile work
-aws configure --profile personal
-```
-
-### Profile Files Location
-
-- **Credentials:** `~/.aws/credentials`
-- **Config:** `~/.aws/config`
-- **Backups:** `~/.aws/credentials.backup`, `~/.aws/config.backup` (created before deletion)
 
 ## 🔍 Troubleshooting
 
@@ -487,33 +547,6 @@ For more detailed error information:
 python3 -v awsprofile list
 ```
 
-## 🤝 Contributing
-
-Contributions are welcome! Here's how you can help:
-
-1. **Fork the repository**
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Commit your changes** (`git commit -m 'Add amazing feature'`)
-4. **Push to the branch** (`git push origin feature/amazing-feature`)
-5. **Open a Pull Request**
-
-### Development Setup
-
-```bash
-# Clone your fork
-git clone https://github.com/yourusername/aws-profile-switcher.git
-cd aws-profile-switcher
-
-# Install development dependencies
-pip3 install -r requirements.txt
-
-# Install in development mode
-pip3 install -e .
-
-# Test the tool
-awsprofile --help
-```
-
 ## 📝 Changelog
 
 ### v1.4.0 (2025-06-19) 
@@ -561,38 +594,25 @@ awsprofile --help
 - Command-line interface with multiple usage modes
 - Comprehensive error handling
 
-## 🚀 Future Enhancements
+## 🤝 Contributing
 
-Ideas for future versions:
-- [ ] **MFA support** - handle multi-factor authentication seamlessly
-- [ ] **Profile templates** - quick setup for common configurations with predefined settings
-- [ ] **Config file validation** - check for common configuration issues
-- [ ] **Cross-region switching** - easily switch default regions per profile
-- [ ] **Integration with AWS SSO** - support for AWS Single Sign-On
-- [ ] **Profile aliases** - create friendly names for profiles
-- [ ] **Automatic profile backup/restore** - version control for profiles
-- [ ] **Bulk operations** - create/delete multiple profiles at once
-- [ ] **Profile import/export** - share profile configurations (without credentials)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Built for developers frustrated with AWS profile management
-- Inspired by the need for simple, reliable tooling that works with CDK
-- Thanks to the AWS CLI team for the excellent underlying tools
-- Special thanks to the CDK community for feedback on virtual environment issues
+- Built for developers who work with multiple AWS accounts
+- Inspired by the need for better AWS profile management in CDK projects
+- Thanks to the AWS CLI team for providing the foundation
+```
+📞 Support
 
-## 📞 Support
+🐛 Bug reports: Open an issue
+💡 Feature requests: Open an issue
+📧 Questions: sovang.widomski.cert@gmail.com
 
-- 🐛 **Bug reports:** [Open an issue](https://github.com/sovangwidomski/aws-profile-switcher/issues)
-- 💡 **Feature requests:** [Open an issue](https://github.com/sovangwidomski/aws-profile-switcher/issues)
-- 📧 **Questions:** sovang.widomski.cert@gmail.com
 
----
-
-**Made with ❤️ by [Sovang Widomski](https://github.com/sovangwidomski)**
-
-*If this tool saved you time (especially with CDK!), please ⭐ star the repository!*
+Made with ❤️ by Sovang Widomski
