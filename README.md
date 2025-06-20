@@ -1,4 +1,4 @@
-# AWS Profile Switcher v1.5.0
+# AWS Profile Switcher v1.5.1
 
 A dead-simple tool to list, switch, and manage AWS profiles for local development.
 
@@ -217,6 +217,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Changelog
+### v1.5.1 (2025-06-19)
+- Fix refresh not redisplaying menu
+- Fix profile switching exiting interactive mode
 
 ### v1.5.0 (2025-06-19)
 - 🎯 **Back to simplicity**: Automatic profile switching without shell complexity

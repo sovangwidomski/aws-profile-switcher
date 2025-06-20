@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="aws-profile-switcher",
-    version="1.5.0",
+    version="1.5.1",
     author="Your Name",
     author_email="your.email@example.com",
     description="Simple AWS profile switcher for easy local development",

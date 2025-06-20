@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AWS Profile Switcher v1.5.0
+AWS Profile Switcher v1.5.1
 A simple tool to list and switch between AWS profiles with ease.
 """
 
@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import List, Dict, Optional
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 
 def get_profiles() -> Dict[str, Dict]:
