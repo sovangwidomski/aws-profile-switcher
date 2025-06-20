@@ -17,7 +17,7 @@ from typing import List, Tuple, Optional
 import shutil
 import getpass
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 class AWSProfileManager:
     """Main class for managing AWS profiles."""
@@ -117,7 +117,6 @@ class AWSProfileManager:
                 return False
             
             # Hide secret key input (basic implementation)
-            import getpass
             try:
                 secret_key = getpass.getpass("   AWS Secret Access Key: ").strip()
             except KeyboardInterrupt:
@@ -238,7 +237,7 @@ region = {region}
             print(f"✅ Added '{profile_name}' to config file")
             
             print(f"\n🎉 Successfully created profile '{profile_name}'!")
-            print(f"💡 Test it with: awsprofile {profile_name}")
+            print(f"💡 Test it with: awsprofile -p {profile_name}")
             return True
             
         except subprocess.TimeoutExpired:
@@ -322,65 +321,54 @@ region = {region}
             print(f"❌ Error deleting profile: {str(e)}")
             return False
     
-    def show_profiles(self) -> None:
-        """Display current profile and all available profiles."""
-        current = self.get_current_profile()
+    def list_profiles(self, names_only: bool = False) -> None:
+        """List all available AWS profiles with account information."""
         profiles = self.get_available_profiles()
+        current_profile = self.get_current_profile()
         
         if not profiles:
+            print("❌ No AWS profiles found.")
+            print("💡 Create one with: aws configure --profile <name>")
             return
         
-        print("\n🔧 AWS Profile Manager v{}".format(__version__))
-        print("=" * 60)
+        if names_only:
+            for profile in profiles:
+                print(profile)
+            return
         
-        # Show current profile with account info
-        current_account, current_detail = self.get_account_info(current)
-        print(f"📍 Current profile: {current}")
-        print(f"   Account: {current_account}")
-        
-        if current_account not in ["Invalid", "Error", "Timeout"]:
-            username = self.extract_username(current_detail)
-            print(f"   User: {username}")
-        elif current_detail:
-            print(f"   Status: {current_detail}")
-        
-        print(f"\n📋 Available profiles ({len(profiles)} total):")
-        print("-" * 40)
+        print("📋 Available profiles ({} total):".format(len(profiles)))
+        print("----------------------------------------")
         
         for i, profile in enumerate(profiles, 1):
-            account_id, detail = self.get_account_info(profile)
-            status = "✅" if profile == current else "  "
+            is_current = profile == current_profile
+            marker = "✅ " if is_current else "   "
             
-            print(f"{status} {i:2d}. {profile}")
-            print(f"       Account: {account_id}")
+            print(f"{marker}{i}. {profile}")
             
-            # Show additional info based on status
-            if account_id == "Invalid":
-                print(f"       Status: ❌ {detail}")
-            elif account_id == "Error":
-                print(f"       Status: ⚠️  {detail}")
-            elif account_id == "Timeout":
-                print(f"       Status: ⏱️  {detail}")
-    
-    def validate_profile(self, profile_name: str) -> bool:
-        """Validate that a profile exists and has valid credentials."""
-        profiles = self.get_available_profiles()
+            # Get account info for each profile
+            account_info = self.get_account_info(profile)
+            if account_info:
+                account_id, username = account_info
+                print(f"       Account: {account_id}")
+                if username != "Unknown":
+                    print(f"       User: {username}")
+            else:
+                print("       ❌ Invalid/expired credentials")
+            print()
+
+    def show_current_profile(self) -> None:
+        """Show the current AWS profile with account information."""
+        current_profile = self.get_current_profile()
+        print(f"📍 Current profile: {current_profile}")
         
-        if profile_name not in profiles:
-            print(f"❌ Profile '{profile_name}' not found.")
-            print(f"💡 Available profiles: {', '.join(profiles)}")
-            return False
-        
-        # Test the profile
-        print(f"🔍 Testing profile '{profile_name}'...")
-        account_id, detail = self.get_account_info(profile_name)
-        
-        if account_id in ["Invalid", "Error", "Timeout"]:
-            print(f"❌ Profile '{profile_name}' validation failed:")
-            print(f"   {detail}")
-            return False
-        
-        return True
+        account_info = self.get_account_info(current_profile)
+        if account_info:
+            account_id, username = account_info
+            print(f"   Account: {account_id}")
+            if username != "Unknown":
+                print(f"   User: {username}")
+        else:
+            print("   ❌ Invalid/expired credentials")
     
     def setup_shell_integration(self) -> bool:
         """Set up shell integration automatically."""
@@ -399,27 +387,33 @@ region = {region}
         # Shell integration functions
         integration_code = '''
 # AWS Profile Switcher - Auto-generated
-awsp() { eval "$(awsprofile "$1" --shell)"; }
+awsp() { 
+    if [ $# -eq 0 ]; then
+        echo "❌ Profile name required"
+        echo "💡 Usage: awsp <profile-name>"
+        echo "💡 Available profiles:"
+        awsprofile list --names-only
+        return 1
+    fi
+    
+    local output
+    output=$(awsprofile -p "$1" --shell 2>&1)
+    
+    if echo "$output" | grep -q "export AWS_PROFILE"; then
+        # Success - evaluate the export command
+        eval "$output"
+        echo "✅ Switched to AWS profile: $1"
+    else
+        # Error - show the error message
+        echo "$output"
+        return 1
+    fi
+}
+
 awsl() { awsprofile list; }
 awsi() { awsprofile; }
 awsc() { awsprofile current; }
 awsclear() { unset AWS_PROFILE; echo "✅ Cleared AWS_PROFILE"; }
-
-# Tab completion for profile names
-if [[ "$SHELL" == *"zsh"* ]]; then
-    _awsp_completion() {
-        local profiles=($(awsprofile list --names-only 2>/dev/null))
-        _describe 'AWS profiles' profiles
-    }
-    compdef _awsp_completion awsp
-elif [[ "$SHELL" == *"bash"* ]]; then
-    _awsp_completion() {
-        local cur="${COMP_WORDS[COMP_CWORD]}"
-        local profiles=$(awsprofile list --names-only 2>/dev/null)
-        COMPREPLY=($(compgen -W "$profiles" -- "$cur"))
-    }
-    complete -F _awsp_completion awsp
-fi
 '''
         
         # Check if already set up
@@ -469,30 +463,44 @@ fi
 
     def switch_profile(self, profile_name: str, shell_mode: bool = False) -> bool:
         """Switch to a specific AWS profile."""
-        if not self.validate_profile(profile_name):
+        # Check if profile exists
+        profiles = self.get_available_profiles()
+        if profile_name not in profiles:
+            print(f"❌ Profile '{profile_name}' not found.")
+            print(f"💡 Available profiles: {', '.join(profiles)}")
             return False
         
-        if shell_mode:
-            # Output shell commands for sourcing
-            print(f"export AWS_PROFILE={profile_name}")
+        # If profile exists but it's None (no active profile), just set it
+        if self.get_current_profile() == profile_name:
+            if shell_mode:
+                print(f"export AWS_PROFILE={profile_name}")
+            else:
+                print(f"✅ Already using AWS profile: {profile_name}")
             return True
         
-        # Set the environment variable for this session
-        os.environ['AWS_PROFILE'] = profile_name
+        # Get account info for validation
+        account_info = self.get_account_info(profile_name)
+        if not account_info:
+            print(f"❌ Invalid or expired credentials for profile '{profile_name}'")
+            return False
         
-        # Get account info for confirmation
-        account_id, arn = self.get_account_info(profile_name)
-        username = self.extract_username(arn)
+        account_id, username = account_info
         
-        print(f"✅ Successfully switched to profile '{profile_name}'")
-        print(f"   Account: {account_id}")
-        print(f"   User: {username}")
-        
-        # Show how to make this permanent
-        print(f"\n💡 To use with CDK/tools in current shell:")
-        print(f"   eval \"$(awsprofile {profile_name} --shell)\"")
-        print(f"\n💡 Or add this function to ~/.zshrc:")
-        print("   awsp() { eval \"$(awsprofile \"$1\" --shell)\"; }")
+        if shell_mode:
+            # Output shell export command
+            print(f"export AWS_PROFILE={profile_name}")
+        else:
+            # Set environment variable for current process
+            os.environ['AWS_PROFILE'] = profile_name
+            print(f"✅ Switched to AWS profile: {profile_name}")
+            print(f"   Account: {account_id}")
+            if username != "Unknown":
+                print(f"   User: {username}")
+            
+            print(f"\n💡 To use with CDK/tools in current shell:")
+            print(f"   eval \"$(awsprofile -p {profile_name} --shell)\"")
+            print(f"\n💡 Or add shell integration with:")
+            print(f"   awsprofile setup-shell")
         
         return True
     
@@ -504,7 +512,39 @@ fi
             return
         
         while True:
-            self.show_profiles()
+            current = self.get_current_profile()
+            
+            print("\n🔧 AWS Profile Manager v{}".format(__version__))
+            print("=" * 60)
+            
+            # Show current profile with account info
+            current_account, current_detail = self.get_account_info(current)
+            print(f"📍 Current profile: {current}")
+            print(f"   Account: {current_account}")
+            
+            if current_account not in ["Invalid", "Error", "Timeout"]:
+                username = self.extract_username(current_detail)
+                print(f"   User: {username}")
+            elif current_detail:
+                print(f"   Status: {current_detail}")
+            
+            print(f"\n📋 Available profiles ({len(profiles)} total):")
+            print("-" * 40)
+            
+            for i, profile in enumerate(profiles, 1):
+                account_id, detail = self.get_account_info(profile)
+                status = "✅" if profile == current else "  "
+                
+                print(f"{status} {i:2d}. {profile}")
+                print(f"       Account: {account_id}")
+                
+                # Show additional info based on status
+                if account_id == "Invalid":
+                    print(f"       Status: ❌ {detail}")
+                elif account_id == "Error":
+                    print(f"       Status: ⚠️  {detail}")
+                elif account_id == "Timeout":
+                    print(f"       Status: ⏱️  {detail}")
             
             print(f"\n🔄 Options:")
             print(f"   1-{len(profiles)}: Switch to profile")
@@ -582,118 +622,126 @@ fi
                 break
 
 
-def show_help():
-    """Show help message."""
-    print("AWS Profile Switcher v{}".format(__version__))
-    print("\nA simple tool to create, view, switch, and delete AWS profiles with shell integration.")
-    print("\nUsage:")
-    print("  awsprofile                    # Interactive mode")
-    print("  awsprofile list               # Show all profiles")
-    print("  awsprofile current            # Show current profile")
-    print("  awsprofile <profile>          # Switch to specific profile")
-    print("  awsprofile <profile> --shell  # Output shell export command")
-    print("  awsprofile create <profile>   # Create a new profile")
-    print("  awsprofile delete <profile>   # Delete a profile")
-    print("  awsprofile setup-shell        # Set up shell integration (one-time)")
-    print("  awsprofile --help             # Show this help")
-    print("  awsprofile --version          # Show version")
-    print("\nExamples:")
-    print("  awsprofile setup-shell        # One-time setup")
-    print("  awsprofile list               # See YOUR actual profile names")
-    print("  awsprofile my-company-prod    # Switch to YOUR profile (replace with real name)")
-    print("  awsprofile current            # Show current profile")
-    print("  awsprofile create new-client  # Create profile named 'new-client'")
-    print("  awsprofile delete old-profile # Delete YOUR profile (replace with real name)")
-    print("\nShell Integration (after setup-shell):")
-    print("  awsp <YOUR-PROFILE-NAME>  # Switch profiles (use YOUR real profile names!)")
-    print("  awsl                      # List all profiles")
-    print("  awsi                      # Interactive mode")
-    print("  awsc                      # Show current profile") 
-    print("  awsclear                  # Clear AWS_PROFILE")
-    print("\n💡 Important: Replace <profile> and <YOUR-PROFILE-NAME> with your actual AWS profile names!")
-    print("   Use 'awsprofile list' to see what profiles you have.")
-
-
-def generate_shell_integration():
-    """Generate shell integration commands."""
-    integration = r'''
-# AWS Profile Switcher Shell Integration
-# Add this to your ~/.zshrc or ~/.bashrc
-
-awsp() {
-    if [ $# -eq 0 ]; then
-        # No arguments - show interactive mode
-        awsprofile
-    else
-        # Switch profile and export to current shell
-        local output
-        output=$(awsprofile "$1" --shell 2>&1)
-        
-        if echo "$output" | grep -q "export AWS_PROFILE"; then
-            # Success - evaluate the export command
-            eval "$output"
-            echo "✅ Switched to AWS profile: $1"
-            echo "   Use 'aws sts get-caller-identity' to verify"
-        else
-            # Error - show the error message
-            echo "$output"
-        fi
-    fi
-}
-
-# Tab completion for awsp function (bash)
-_awsp_completion() {
-    local profiles
-    profiles=$(awsprofile list 2>/dev/null | grep "^  [0-9]" | sed 's/^.*[0-9]\. //' | cut -d' ' -f1)
-    COMPREPLY=($(compgen -W "$profiles" -- "${COMP_WORDS[1]}"))
-}
-complete -F _awsp_completion awsp
-
-# Alternative short aliases
-alias awsl="awsprofile list"     # List profiles
-alias awsi="awsprofile"          # Interactive mode
-'''
-    return integration
-
-
 def main():
-    """Main CLI entry point."""
+    """Main entry point for the CLI."""
+    import argparse
+    
+    # Create the main parser
+    parser = argparse.ArgumentParser(
+        prog='awsprofile',
+        description='AWS Profile Switcher - Manage AWS profiles with ease',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  awsprofile                         # Interactive mode
+  awsprofile list                    # List all profiles
+  awsprofile current                 # Show current profile  
+  awsprofile setup-shell             # Setup shell integration (one-time)
+  awsprofile create dev-profile      # Create new profile
+  awsprofile delete old-profile      # Delete profile
+  awsprofile -p work                 # Switch to 'work' profile
+  awsprofile -p work --shell         # Switch with shell export
+
+Shell Integration Commands (after running 'awsprofile setup-shell'):
+  awsp <profile>                     # Switch to profile (persists in shell)
+  awsl                               # List all profiles  
+  awsi                               # Interactive mode
+  awsc                               # Show current profile
+  awsclear                           # Clear AWS_PROFILE environment variable
+  
+Quick Start:
+  1. awsprofile setup-shell          # One-time setup
+  2. source ~/.zshrc                 # Reload shell config  
+  3. awsp my-profile                 # Switch profiles easily
+        """
+    )
+    
+    # Add the profile flag
+    parser.add_argument('-p', '--profile', 
+                       metavar='NAME',
+                       help='Switch to specified profile')
+    
+    # Add shell flag (only works with -p)
+    parser.add_argument('--shell', 
+                       action='store_true',
+                       help='Output shell export command (use with -p)')
+    
+    # Add version flag
+    parser.add_argument('--version', 
+                       action='version', 
+                       version=f'AWS Profile Switcher v{__version__}')
+    
+    # Create subcommands
+    subparsers = parser.add_subparsers(dest='command', 
+                                      help='Available commands')
+    
+    # List command
+    list_parser = subparsers.add_parser('list', 
+                                       help='List all available profiles')
+    list_parser.add_argument('--names-only', 
+                            action='store_true',
+                            help='Output only profile names')
+    
+    # Current command  
+    subparsers.add_parser('current', 
+                         help='Show current active profile')
+    
+    # Setup-shell command
+    subparsers.add_parser('setup-shell', 
+                         help='Set up shell integration (one-time setup)')
+    
+    # Create command
+    create_parser = subparsers.add_parser('create', 
+                                         help='Create a new profile')
+    create_parser.add_argument('name', 
+                              help='Name of the profile to create')
+    
+    # Delete command
+    delete_parser = subparsers.add_parser('delete', 
+                                         help='Delete an existing profile')
+    delete_parser.add_argument('name', 
+                              help='Name of the profile to delete')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Create manager
     manager = AWSProfileManager()
     
-    if len(sys.argv) == 1:
-        # No arguments - start interactive mode
+    # Handle profile switching (can be combined with commands or standalone)
+    if args.profile:
+        if args.shell:
+            manager.switch_profile(args.profile, shell_mode=True)
+        else:
+            manager.switch_profile(args.profile)
+        return
+    
+    # Handle subcommands
+    if args.command == 'list':
+        if hasattr(args, 'names_only') and args.names_only:
+            manager.list_profiles(names_only=True)
+        else:
+            manager.list_profiles()
+    elif args.command == 'current':
+        manager.show_current_profile()
+    elif args.command == 'setup-shell':
+        success = manager.setup_shell_integration()
+        if not success:
+            sys.exit(1)
+    elif args.command == 'create':
+        manager.create_profile(args.name)
+    elif args.command == 'delete':
+        manager.delete_profile(args.name)
+    elif args.command is None and not args.profile:
+        # No command and no profile - start interactive mode
         manager.interactive_mode()
-    elif len(sys.argv) == 2:
-        arg = sys.argv[1]
-        
-        if arg in ['--help', '-h']:
-            show_help()
-        elif arg in ['--version', '-v']:
-            print(f"AWS Profile Switcher v{__version__}")
-        elif arg == 'list':
-            manager.show_profiles()
-        elif arg == '--shell-integration':
-            print(generate_shell_integration())
-        else:
-            # Switch to specific profile
-            manager.switch_profile(arg)
-    elif len(sys.argv) == 3:
-        command = sys.argv[1]
-        arg = sys.argv[2]
-        
-        if command == 'create':
-            manager.create_profile(arg)
-        elif command == 'delete':
-            manager.delete_profile(arg)
-        elif arg == '--shell':
-            # Switch profile in shell mode
-            manager.switch_profile(command, shell_mode=True)
-        else:
-            print("❌ Invalid arguments.")
-            print("💡 Use 'awsprofile --help' for usage information.")
+    elif args.shell and not args.profile:
+        # --shell flag without -p doesn't make sense
+        print("❌ --shell flag requires -p/--profile flag")
+        print("💡 Usage: awsprofile -p <profile-name> --shell")
     else:
-        print("❌ Too many arguments.")
-        print("💡 Use 'awsprofile --help' for usage information.")
+        # This shouldn't happen with argparse, but just in case
+        parser.print_help()
 
 
 if __name__ == "__main__":
