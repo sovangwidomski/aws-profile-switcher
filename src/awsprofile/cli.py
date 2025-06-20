@@ -466,44 +466,44 @@ def delete_profile_interactive(profiles: Dict[str, Dict]):
 
 def interactive_mode():
     """Run interactive profile selection."""
-    profiles = get_profiles()
-    
-    if not profiles:
-        print("❌ No AWS profiles found.")
-        print("💡 Run 'aws configure' to create your first profile.")
-        return
-    
-    print(f"\n🔧 AWS Profile Switcher v{VERSION}")
-    print("=" * 50)
-    
-    current = get_current_profile()
-    if current:
-        print(f"📍 Current profile: {current}")
-        if current in profiles:
-            profile_info = profiles[current]
-            print(f"   Account: {profile_info.get('account', 'Unknown')}")
-            print(f"   User: {profile_info.get('user', 'Unknown')}")
-    else:
-        print("📍 No profile currently active")
-    
-    print(f"\n📋 Available profiles ({len(profiles)} total):")
-    print("-" * 40)
-    
-    profile_list = list(profiles.items())
-    for i, (name, info) in enumerate(profile_list, 1):
-        marker = "✅" if name == current else "  "
-        print(f"{marker} {i}. {name}")
-        print(f"       Account: {info.get('account', 'Unknown')}")
-    
-    print(f"\n🔄 Options:")
-    print(f"   1-{len(profiles)}: Switch to profile")
-    print(f"   c: Create a new profile")
-    print(f"   d: Delete a profile")
-    print(f"   x: Clear current profile")
-    print(f"   r: Refresh profile list")
-    print(f"   q: Quit")
-    
-    while True:
+    while True:  # Main loop
+        profiles = get_profiles()
+        
+        if not profiles:
+            print("❌ No AWS profiles found.")
+            print("💡 Run 'aws configure' to create your first profile.")
+            return
+        
+        print(f"\n🔧 AWS Profile Switcher v{VERSION}")
+        print("=" * 50)
+        
+        current = get_current_profile()
+        if current:
+            print(f"📍 Current profile: {current}")
+            if current in profiles:
+                profile_info = profiles[current]
+                print(f"   Account: {profile_info.get('account', 'Unknown')}")
+                print(f"   User: {profile_info.get('user', 'Unknown')}")
+        else:
+            print("📍 No profile currently active")
+        
+        print(f"\n📋 Available profiles ({len(profiles)} total):")
+        print("-" * 40)
+        
+        profile_list = list(profiles.items())
+        for i, (name, info) in enumerate(profile_list, 1):
+            marker = "✅" if name == current else "  "
+            print(f"{marker} {i}. {name}")
+            print(f"       Account: {info.get('account', 'Unknown')}")
+        
+        print(f"\n🔄 Options:")
+        print(f"   1-{len(profiles)}: Switch to profile")
+        print(f"   c: Create a new profile")
+        print(f"   d: Delete a profile")
+        print(f"   x: Clear current profile")
+        print(f"   r: Refresh profile list")
+        print(f"   q: Quit")
+        
         try:
             choice = input("\nSelect option: ").strip().lower()
             
@@ -511,20 +511,20 @@ def interactive_mode():
                 print("👋 Goodbye!")
                 break
             elif choice == 'c':
-                create_profile_interactive()
-                profiles = get_profiles()  # Refresh
-                profile_list = list(profiles.items())
+                if create_profile_interactive():
+                    print("🔄 Returning to main menu...")
+                continue  # Go back to start of loop to redisplay menu
             elif choice == 'd':
-                delete_profile_interactive(profiles)
-                profiles = get_profiles()  # Refresh
-                profile_list = list(profiles.items())
+                if delete_profile_interactive(profiles):
+                    print("🔄 Returning to main menu...")
+                continue  # Go back to start of loop to redisplay menu
             elif choice == 'x':
                 clear_profile()
-                # No need to refresh profiles list since we just cleared default
+                print("🔄 Returning to main menu...")
+                continue  # Go back to start of loop to redisplay menu
             elif choice == 'r':
-                profiles = get_profiles()
-                profile_list = list(profiles.items())
                 print("🔄 Profile list refreshed!")
+                continue  # Go back to start of loop to redisplay menu
             else:
                 # Try to parse as profile number
                 try:
@@ -532,11 +532,26 @@ def interactive_mode():
                     if 1 <= profile_num <= len(profiles):
                         selected_profile = profile_list[profile_num - 1][0]
                         if switch_profile(selected_profile):
-                            break  # Exit after successful switch
+                            # Ask if user wants to continue managing profiles
+                            try:
+                                continue_choice = input("\n🔄 Continue managing profiles? (Y/n): ").strip().lower()
+                                if continue_choice in ['n', 'no']:
+                                    print("👋 Goodbye!")
+                                    break
+                                else:
+                                    print("🔄 Returning to main menu...")
+                                    continue  # Go back to start of loop
+                            except KeyboardInterrupt:
+                                print("\n👋 Goodbye!")
+                                break
                     else:
                         print(f"❌ Please enter a number between 1 and {len(profiles)}")
+                        input("Press Enter to continue...")  # Pause so user can read error
+                        continue
                 except ValueError:
                     print("❌ Please enter a valid option")
+                    input("Press Enter to continue...")  # Pause so user can read error
+                    continue
                 
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")
