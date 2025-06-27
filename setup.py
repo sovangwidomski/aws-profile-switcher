@@ -12,7 +12,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/aws-profile-switcher",
-    packages=find_packages(),
+    packages=find_packages(where="src"),  # Look for packages in src/ directory
+    package_dir={"": "src"},              # Tell setuptools that packages are under src/
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
